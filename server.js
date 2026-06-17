@@ -193,7 +193,8 @@ app.post("/api/Customer/AddCustomer", protect, async (req, res) => {
       Phone,
       folderName,
       status,
-      customerType, // 🌟 SAXID: Halkan ayaa lagu soo daray si uusan "VIP" kaliya u noqon
+      customerType,
+      PhotoType, // 🌟 SAXID: Halkan ayaa lagu soo daray si uusan "VIP" kaliya u noqon
       amountPaid,
       remainingAmount,
       numberOfPhotos,
@@ -205,7 +206,8 @@ app.post("/api/Customer/AddCustomer", protect, async (req, res) => {
       Phone,
       folderName,
       status,
-      customerType, // 🌟 Halkan ayaa lagu daray xogtii laga soo qabtay req.body
+      customerType,
+      PhotoType, // 🌟 Halkan ayaa lagu daray xogtii laga soo qabtay req.body
       amountPaid,
       remainingAmount,
       numberOfPhotos,
