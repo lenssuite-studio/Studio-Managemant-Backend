@@ -1,33 +1,68 @@
-import express, { response } from "express";
+import express from "express";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import cors from "cors";
+import rateLimit from "express-rate-limit"; // 🌟 Soo hormaray
+import cookieParser from "cookie-parser";
+
+// Models & Controls
 import AddCustomer from "./models/AddCustomer.js";
 import { protect } from "./middleware/authMiddleware.js";
-import { loginUser, registerUser } from "./controllers/userController.js";
+import { loginUser, registerUser,refreshToken } from "./controllers/userController.js";
 import User from "./models/User.js";
 import bcrypt from "bcryptjs";
 
 dotenv.config();
 
 const app = express();
+app.use(
+  cors({
+    origin: "http://localhost:5173", // URL-ka React app-kaaga (ku beddel kan dhabta ah haddii uu ka duwan yahay)
+    credentials: true, // Tani waxay oggolaanaysaa in Cookies-ka la isku gudbiyo
+  }),
+);
+
+// 🌟 MUHIIM: Render proxies ayay isticmaashaa, khadkan ayaa ka caawinaya rate-limit-ka inuu qabto IP-ga saxda ah ee macmiilka
+app.set("trust proxy", 1);
 
 app.use(cors());
 app.use(express.json());
 
-const PORT = process.env.PORT || 5000;
+// ==========================================
+// 🛡️ RATE LIMITERS (Waa inay halkan sare ku jiraan)
+// ==========================================
 
-mongoose
-  .connect(process.env.MONGO_URI)
-  .then(() => {
-    console.log("MongoDB is connected ✅");
-    app.listen(PORT, () => {
-      console.log(`Server is running: http://localhost:${PORT}`);
-    });
-  })
-  .catch((err) => console.log("DB Connection Error: ❌", err));
+// 1. Xaddidaadda Guud: IP kasta wuxuu samayn karaa 100 codsi 15 daqiiqo walba
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 daqiiqo
+  max: 100,
+  message: {
+    error: "Codsiyo badan ayaa ka yimid IP-gaga, fadlan sug 15 daqiiqo.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
-// Ku dar meeshaan backend-kaaga (Node.js / Express)
+// 2. Xaddidaadda Login-ka iyo Register-ka (Aad u adag)
+const authLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000, // 5 daqiiqo
+  max: 5,
+  message: {
+    error: "Isku-dayo badan oo khaldan! Fadlan sug 5 daqiiqo ka dib.",
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// 🌟 CODSASHADA MIDDLEWARES-KA (Kahor intaanan endpoints la qorin)
+app.use("/api/User/Login", authLimiter);
+app.use("/api/User/register", authLimiter);
+app.use("/api/", generalLimiter);
+
+// ==========================================
+// 🌐 GENERAL ENDPOINTS
+// ==========================================
+
 app.get("/api/cron/wakeup", (req, res) => {
   res.status(200).json({
     success: true,
@@ -62,7 +97,6 @@ app.put("/api/Admin/Studios/Toggle/:id", protect, async (req, res) => {
   }
 });
 
-// 6. DELETE STUDIO
 app.delete("/api/Admin/Studios/Delete/:id", protect, async (req, res) => {
   try {
     if (req.role !== "superadmin") {
@@ -80,7 +114,6 @@ app.delete("/api/Admin/Studios/Delete/:id", protect, async (req, res) => {
   }
 });
 
-// 4. Soo saar dhammaan Studios-ka diiwaangashan
 app.get("/api/Admin/Studios", protect, async (req, res) => {
   try {
     if (req.role !== "superadmin") {
@@ -95,12 +128,10 @@ app.get("/api/Admin/Studios", protect, async (req, res) => {
 
     res.status(200).json(studios);
   } catch (error) {
-    console.log(error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// 1. Soo saar dhammaan macaamiisha ay studio-yada oo dhan kaydiyeen
 app.get("/api/Admin/Customers", protect, async (req, res) => {
   try {
     if (req.role !== "superadmin") {
@@ -115,7 +146,6 @@ app.get("/api/Admin/Customers", protect, async (req, res) => {
 
     res.status(200).json(customers);
   } catch (error) {
-    console.log(error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -147,7 +177,6 @@ app.get("/api/Admin/Stats", protect, async (req, res) => {
       inactiveStudios,
     });
   } catch (error) {
-    console.log(error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -180,12 +209,12 @@ app.post("/api/Admin/CreateFirstSuperadmin", async (req, res) => {
 // ==========================================
 app.post("/api/User/register", registerUser);
 app.post("/api/User/Login", loginUser);
+app.post("/api/User/refresh", refreshToken);
 
 // ==========================================
 // 📸 STUDIO CUSTOMER ENDPOINTS
 // ==========================================
 
-// Macmiil ku dar nidaamka
 app.post("/api/Customer/AddCustomer", protect, async (req, res) => {
   try {
     const {
@@ -194,7 +223,7 @@ app.post("/api/Customer/AddCustomer", protect, async (req, res) => {
       folderName,
       status,
       customerType,
-      PhotoType, // 🌟 SAXID: Halkan ayaa lagu soo daray si uusan "VIP" kaliya u noqon
+      PhotoType,
       amountPaid,
       remainingAmount,
       numberOfPhotos,
@@ -207,7 +236,7 @@ app.post("/api/Customer/AddCustomer", protect, async (req, res) => {
       folderName,
       status,
       customerType,
-      PhotoType, // 🌟 Halkan ayaa lagu daray xogtii laga soo qabtay req.body
+      PhotoType,
       amountPaid,
       remainingAmount,
       numberOfPhotos,
@@ -223,7 +252,6 @@ app.post("/api/Customer/AddCustomer", protect, async (req, res) => {
   }
 });
 
-// Liiska macaamiisha u gaarka ah Studio-ga Login-ka ah
 app.get("/api/Customer/List", protect, async (req, res) => {
   try {
     const customers = await AddCustomer.find({ userId: req.userId }).sort({
@@ -231,14 +259,12 @@ app.get("/api/Customer/List", protect, async (req, res) => {
     });
     res.status(200).json(customers);
   } catch (error) {
-    console.log(error);
     res
       .status(500)
       .json({ error: "Cilad ayaa dhacday xilliga soo akhrinta macaamiisha" });
   }
 });
 
-// Tirtir Macmiil
 app.delete("/api/Customer/Delete/:id", protect, async (req, res) => {
   try {
     const customer = await AddCustomer.findOne({
@@ -257,12 +283,10 @@ app.delete("/api/Customer/Delete/:id", protect, async (req, res) => {
       id: req.params.id,
     });
   } catch (error) {
-    console.log(error);
     res.status(500).json({ error: error.message });
   }
 });
 
-// Wax ka beddel Macmiil (Edit)
 app.put("/api/Customer/Edit/:id", protect, async (req, res) => {
   try {
     const customer = await AddCustomer.findOne({
@@ -286,10 +310,8 @@ app.put("/api/Customer/Edit/:id", protect, async (req, res) => {
   }
 });
 
-// 📂 5. ARCHIVE CUSTOMER ENDPOINT (KAN CUSUB)
 app.put("/api/Customer/Archive/:id", protect, async (req, res) => {
   try {
-    // Hubi in macmiilku jiro isla markaana uu leeyahay Studio-gan login-ka ah (Security Check)
     const customer = await AddCustomer.findOne({
       _id: req.params.id,
       userId: req.userId,
@@ -301,11 +323,10 @@ app.put("/api/Customer/Archive/:id", protect, async (req, res) => {
         .json({ error: "Macmiilkan lama helin ama fasax u maku lihid!" });
     }
 
-    // U beddel isArchived mid true ah
     const updatedCustomer = await AddCustomer.findByIdAndUpdate(
       req.params.id,
       { isArchived: true },
-      { returnDocument: "after" }, // Tani waxay soo celinaysaa xogtii oo cusub si Redux u helo
+      { returnDocument: "after" },
     );
 
     res.status(200).json(updatedCustomer);
@@ -314,4 +335,17 @@ app.put("/api/Customer/Archive/:id", protect, async (req, res) => {
   }
 });
 
+// ==========================================
+// 🚀 MONGOOSE & SERVER BOOT
+// ==========================================
+const PORT = process.env.PORT || 5000;
 
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => {
+    console.log("MongoDB is connected ✅");
+    app.listen(PORT, () => {
+      console.log(`Server is running: http://localhost:${PORT}`);
+    });
+  })
+  .catch((err) => console.log("DB Connection Error: ❌", err));

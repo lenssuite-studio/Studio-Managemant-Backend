@@ -2,8 +2,23 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 
-const generateToken = (id, role) => {
-  return jwt.sign({ id, role }, process.env.JWT_SECRET, { expiresIn: "30d" });
+// 🌟 1. ACCESS TOKEN: Wuxuu dhacayaa 15 daqiiqo oo kaliya (Kani waa kan ammaanaya foomamka iyo macaamiisha)
+const generateAccessToken = (id, role, req) => {
+  const userAgent = req.headers["user-agent"] || "unknown_browser";
+  return jwt.sign(
+    { id, role, ua: userAgent }, 
+    process.env.JWT_SECRET, 
+    { expiresIn: "15m" } 
+  );
+};
+
+// 🌟 2. REFRESH TOKEN: Wuxuu dhacayaa 7 maalmood, shaqadiisuna waa inuu Access Token cusub dhalo
+const generateRefreshToken = (id) => {
+  return jwt.sign(
+    { id }, 
+    process.env.JWT_SECRET, 
+    { expiresIn: "7d" }
+  );
 };
 
 export const registerUser = async (req, res) => {
@@ -71,11 +86,21 @@ export const loginUser = async (req, res) => {
       return res.status(400).json({ message: "Invalid email or password." });
     }
 
-    const token = generateToken(user._id, user.role);
+    // 🌟 3. DHALINTA ACCESS & REFRESH TOKENS (Waxaa lagu daray 'req')
+    const accessToken = generateAccessToken(user._id, user.role, req);
+    const refreshToken = generateRefreshToken(user._id);
+
+    // 🌟 4. KU SHUBISTA REFRESH TOKEN-KA HTTP-ONLY COOKIE
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true, // JavaScript ma akhrisan karto (Anti-XSS / Anti-Copy-Paste)
+      secure: process.env.NODE_ENV === "production", // Kaliya wuxuu ku shaqaynayaa HTTPS marka la dhoofiyo
+      sameSite: "strict", // Ka hortagga weerarada CSRF
+      maxAge: 7 * 24 * 60 * 60 * 1000, // Wuxuu dhacayaa 7 maalmood gudaheed
+    });
 
     return res.status(200).json({
       message: "Login successful.",
-      token,
+      accessToken, // 🌟 Frontend-ka waxaan hadda u diraynaa Access Token-ka mudada gaaban ah
       user: {
         id: user._id,
         username: user.username,
@@ -87,6 +112,40 @@ export const loginUser = async (req, res) => {
     return res.status(500).json({
       message: "Server error while logging in.",
       error: error.message,
+    });
+  }
+};
+
+// 🌟 5. ENDPOINT-KA CUSUB EE REFRESH TOKEN (Kani wuxuu soo saaraa Access Token cusub si qarsoon)
+export const refreshToken = async (req, res) => {
+  try {
+    const cookies = req.cookies;
+    
+    // Hubi in cookie-ga uu jiro 'refreshToken'
+    if (!cookies || !cookies.refreshToken) {
+      return res.status(401).json({ message: "Fasax ma lihid, Refresh Token waa maqan yahay" });
+    }
+
+    const refreshToken = cookies.refreshToken;
+
+    // Verify refresh token
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+
+    // Soo hel isticmaalaha si loo helo role-kiisa saxda ah hadda
+    const user = await User.findById(decoded.id);
+    if (!user || !user.isActive) {
+      return res.status(403).json({ message: "Akoon-kan ma jiro ama waa la xannibay" });
+    }
+
+    // Samee Access Token cusub oo wata 15 daqiiqo oo kale
+    const newAccessToken = generateAccessToken(user._id, user.role, req);
+
+    return res.status(200).json({
+      accessToken: newAccessToken
+    });
+  } catch (error) {
+    return res.status(403).json({
+      message: "Refresh Token-ku waa khaldan yahay ama wuu dhacay",
     });
   }
 };
