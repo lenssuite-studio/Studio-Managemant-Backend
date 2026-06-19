@@ -18,15 +18,18 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    isActive:{
-      type:Boolean,
-      default:true,
+    isActive: {
+      type: Boolean,
+      default: true,
     },
     role: {
-    type: String,
-    enum:['superadmin', 'studio_admin'],
-    default:"studio_admin",
-  },
+      type: String,
+      enum: ["superadmin", "studio_admin"],
+      default: "studio_admin",
+    },
+    lastLogin: {
+      type: Date,
+    },
   },
   { timestamps: true },
 );

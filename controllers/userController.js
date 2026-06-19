@@ -86,6 +86,10 @@ export const loginUser = async (req, res) => {
       return res.status(400).json({ message: "Invalid email or password." });
     }
 
+    user.lastLogin =new Date();
+    await user.save();
+
+
     // 🌟 3. DHALINTA ACCESS & REFRESH TOKENS (Waxaa lagu daray 'req')
     const accessToken = generateAccessToken(user._id, user.role, req);
     const refreshToken = generateRefreshToken(user._id);
