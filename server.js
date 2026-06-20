@@ -2,7 +2,7 @@ import express from "express";
 import dotenv from "dotenv";
 import mongoose from "mongoose";
 import cors from "cors";
-import rateLimit from "express-rate-limit"; 
+import rateLimit from "express-rate-limit";
 import cookieParser from "cookie-parser"; // 🌟 Diyaar
 
 // Models & Controls
@@ -15,6 +15,7 @@ import {
 } from "./controllers/userController.js";
 import User from "./models/User.js";
 import bcrypt from "bcryptjs";
+ import { forgotPassword, resetPassword} from "./controllers/userController.js";
 
 dotenv.config();
 
@@ -23,11 +24,15 @@ const app = express();
 // 🌟 1. CONFIGURATION-KA CORS (Kaliya midkan saxda ah ayaa jira hadda)
 app.use(
   cors({
-    origin: ["https://lenssuitestudio.vercel.app", "https://nssuitestudio.vercel.app", "http://localhost:5173"], 
+    origin: [
+      "https://lenssuitestudio.vercel.app",
+      "https://nssuitestudio.vercel.app",
+      "http://localhost:5173",
+    ],
     credentials: true, // Muhiim si Cookies-ka loo oggolaado
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"]
-  })
+    allowedHeaders: ["Content-Type", "Authorization"],
+  }),
 );
 
 // 🌟 2. MUHIIM: Render proxies proxy trust-ka iyo shaqada Cookies-ka
@@ -41,7 +46,7 @@ app.use(cookieParser()); // 🌟 3. HALKAN AYAA LAGU SHAQALAYSIYAY COOKIE-PARSER
 // ==========================================
 
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
+  windowMs: 15 * 60 * 1000,
   max: 100,
   message: {
     error: "Codsiyo badan ayaa ka yimid IP-gaga, fadlan sug 15 daqiiqo.",
@@ -51,7 +56,7 @@ const generalLimiter = rateLimit({
 });
 
 const authLimiter = rateLimit({
-  windowMs: 5 * 60 * 1000, 
+  windowMs: 5 * 60 * 1000,
   max: 5,
   message: {
     error: "Isku-dayo badan oo khaldan! Fadlan sug 5 daqiiqo ka dib.",
@@ -59,6 +64,9 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
+ /// forgotPassword and resetPassword
+app.post("/api/User/forgotPassword", forgotPassword);
+app.post("/api/User/resetPassword/:token", resetPassword);
 
 // CODSASHADA MIDDLEWARES-KA
 app.use("/api/User/Login", authLimiter);
