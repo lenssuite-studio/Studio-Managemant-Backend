@@ -189,7 +189,9 @@ export const forgotPassword = async (req, res) => {
 
     // Habaynta Nodemailer (Gmail)
     const transporter = nodemailer.createTransport({
-      service: "smtp.ethereal.email",
+      host: "smtp.ethereal.email", // Waxaan u beddelnay 'host'
+      port: 587, // Port-ka rasmiga ah ee Ethereal
+      secure: false, // TLS ayay isticmaashaa, marka waa false
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
