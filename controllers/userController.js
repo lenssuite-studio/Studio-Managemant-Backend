@@ -220,6 +220,35 @@ export const forgotPassword = async (req, res) => {
   }
 };
 
+// 🌟 PHASE 3: PROFILE-KA ISTICMAALAHA HADDA LOGIN AH (view-only)
+export const getProfile = async (req, res) => {
+  try {
+    const user = req._authUser || (await User.findById(req.userId));
+    if (!user) {
+      return res.status(404).json({ message: "Isticmaale lama helin." });
+    }
+
+    let studioName = null;
+    if (req.studioId) {
+      const studio = await Studio.findById(req.studioId).select("studioName");
+      studioName = studio?.studioName || null;
+    }
+
+    return res.status(200).json({
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      studioName,
+      lastLogin: user.lastLogin,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Server error while loading profile.",
+      error: error.message,
+    });
+  }
+};
+
 // 4. BEDDELKA PASWORD-KA CUSUB (Reset Password)
 export const resetPassword = async (req, res) => {
   try {

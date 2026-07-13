@@ -13,6 +13,7 @@ import {
   loginUser,
   registerUser,
   refreshToken,
+  getProfile,
 } from "./controllers/userController.js";
 import User from "./models/User.js";
 import bcrypt from "bcryptjs";
@@ -228,6 +229,7 @@ app.post("/api/Admin/CreateFirstSuperadmin", async (req, res) => {
 app.post("/api/User/register", registerUser);
 app.post("/api/User/Login", loginUser);
 app.post("/api/User/refresh", refreshToken);
+app.get("/api/User/Profile", protect, attachTenant, getProfile);
 
 // ==========================================
 // 📸 STUDIO CUSTOMER ENDPOINTS
@@ -426,6 +428,112 @@ app.get(
         .sort({ createdAt: -1 });
 
       res.status(200).json(employees);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+// 🌟 PHASE 3: Toggle-ka waa in la geliyaa ka hor route-ka guud ee /:id
+// si "Toggle" uusan loola dhaqmin sidii uu yahay :id
+app.put(
+  "/api/Studio/Employees/Toggle/:id",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const employee = await User.findOne({
+        _id: req.params.id,
+        studioId: req.studioId,
+        role: "employee",
+      });
+
+      if (!employee) {
+        return res.status(404).json({ error: "Shaqaale lama helin ama fasax uma lihid" });
+      }
+
+      employee.isActive = !employee.isActive;
+      await employee.save();
+
+      res.status(200).json({
+        message: "Xaaladda shaqaalaha waa la beddelay!",
+        employee: {
+          _id: employee._id,
+          username: employee.username,
+          email: employee.email,
+          role: employee.role,
+          isActive: employee.isActive,
+          createdAt: employee.createdAt,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+app.put(
+  "/api/Studio/Employees/:id",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const employee = await User.findOne({
+        _id: req.params.id,
+        studioId: req.studioId,
+        role: "employee",
+      });
+
+      if (!employee) {
+        return res.status(404).json({ error: "Shaqaale lama helin ama fasax uma lihid" });
+      }
+
+      const { username, email } = req.body;
+      if (username) employee.username = username;
+      if (email) employee.email = email.toLowerCase();
+
+      await employee.save();
+
+      res.status(200).json({
+        message: "Shaqaalaha si guul leh ayaa wax looga beddelay!",
+        employee: {
+          _id: employee._id,
+          username: employee.username,
+          email: employee.email,
+          role: employee.role,
+          isActive: employee.isActive,
+          createdAt: employee.createdAt,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+app.delete(
+  "/api/Studio/Employees/:id",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const employee = await User.findOneAndDelete({
+        _id: req.params.id,
+        studioId: req.studioId,
+        role: "employee",
+      });
+
+      if (!employee) {
+        return res.status(404).json({ error: "Shaqaale lama helin ama fasax uma lihid" });
+      }
+
+      res.status(200).json({
+        message: "Shaqaalaha waa la tirtiray",
+        id: req.params.id,
+      });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
