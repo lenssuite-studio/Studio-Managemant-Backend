@@ -38,6 +38,7 @@ export const protect  = async (req, res, next) => {
     // Xogta ku kaydi 'req' si middleware-ka xiga uu u arko
     req.userId = decoded.id;
     req.role = decoded.role; // Halkan 'req.role' ayaa lagu kaydiyey
+    req._authUser = userCheck; // 🌟 Loo kaydiyey si tenantMiddleware uusan mar labaad u weydiin DB-ga
 
     next();
   } catch (error) {

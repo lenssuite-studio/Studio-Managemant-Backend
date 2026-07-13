@@ -8,6 +8,7 @@ import cookieParser from "cookie-parser"; // 🌟 Diyaar
 // Models & Controls
 import AddCustomer from "./models/AddCustomer.js";
 import { protect } from "./middleware/authMiddleware.js";
+import { attachTenant } from "./middleware/tenantMiddleware.js";
 import {
   loginUser,
   registerUser,
@@ -229,7 +230,7 @@ app.post("/api/User/refresh", refreshToken);
 // 📸 STUDIO CUSTOMER ENDPOINTS
 // ==========================================
 
-app.post("/api/Customer/AddCustomer", protect, async (req, res) => {
+app.post("/api/Customer/AddCustomer", protect, attachTenant, async (req, res) => {
   try {
     const {
       fullName,
@@ -245,6 +246,7 @@ app.post("/api/Customer/AddCustomer", protect, async (req, res) => {
 
     const NewCustomer = await AddCustomer.create({
       userId: req.userId,
+      studioId: req.studioId,
       fullName,
       Phone,
       folderName,
@@ -266,9 +268,9 @@ app.post("/api/Customer/AddCustomer", protect, async (req, res) => {
   }
 });
 
-app.get("/api/Customer/List", protect, async (req, res) => {
+app.get("/api/Customer/List", protect, attachTenant, async (req, res) => {
   try {
-    const customers = await AddCustomer.find({ userId: req.userId }).sort({
+    const customers = await AddCustomer.find({ studioId: req.studioId }).sort({
       createdAt: -1,
     });
     res.status(200).json(customers);
@@ -279,11 +281,11 @@ app.get("/api/Customer/List", protect, async (req, res) => {
   }
 });
 
-app.delete("/api/Customer/Delete/:id", protect, async (req, res) => {
+app.delete("/api/Customer/Delete/:id", protect, attachTenant, async (req, res) => {
   try {
     const customer = await AddCustomer.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      studioId: req.studioId,
     });
     if (!customer) {
       return res
@@ -301,20 +303,23 @@ app.delete("/api/Customer/Delete/:id", protect, async (req, res) => {
   }
 });
 
-app.put("/api/Customer/Edit/:id", protect, async (req, res) => {
+app.put("/api/Customer/Edit/:id", protect, attachTenant, async (req, res) => {
   try {
     const customer = await AddCustomer.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      studioId: req.studioId,
     });
 
     if (!customer) {
       return res.status(404).json({ error: "Customer lama helin" });
     }
 
+    // 🌟 Ka saar goobaha tenant-ka si aan customer-ku loogu wareejin karin studio kale
+    const { studioId, userId, _id, ...safeUpdates } = req.body;
+
     const updatedCustomer = await AddCustomer.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      safeUpdates,
       { returnDocument: "after" },
     );
 
@@ -324,11 +329,11 @@ app.put("/api/Customer/Edit/:id", protect, async (req, res) => {
   }
 });
 
-app.put("/api/Customer/Archive/:id", protect, async (req, res) => {
+app.put("/api/Customer/Archive/:id", protect, attachTenant, async (req, res) => {
   try {
     const customer = await AddCustomer.findOne({
       _id: req.params.id,
-      userId: req.userId,
+      studioId: req.studioId,
     });
 
     if (!customer) {

@@ -7,6 +7,12 @@ const AddCustomerSchem = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+    studioId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Studio",
+      required: true,
+      index: true,
+    },
     fullName: {
       type: String,
       required: true,
@@ -67,5 +73,7 @@ const AddCustomerSchem = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+AddCustomerSchem.index({ studioId: 1, createdAt: -1 });
 
 export default mongoose.model("AddCustomer", AddCustomerSchem);

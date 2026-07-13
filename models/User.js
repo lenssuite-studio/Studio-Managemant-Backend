@@ -27,6 +27,12 @@ const userSchema = new mongoose.Schema(
       enum: ["superadmin", "studio_admin"],
       default: "studio_admin",
     },
+    studioId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Studio",
+      default: null,
+      index: true,
+    },
     lastLogin: {
       type: Date,
     },

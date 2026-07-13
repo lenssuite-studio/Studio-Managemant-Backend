@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import Studio from "../models/Studio.js";
 import crypto from "crypto";
 // 1. Waxaan meesha ka saarnay nodemailer waxaanan soo ragnay Resend
 import { Resend } from "resend";
@@ -43,6 +44,14 @@ export const registerUser = async (req, res) => {
       email: email.toLowerCase(),
       password: hashedPassword,
     });
+
+    // 🌟 MULTI-TENANT: Studio cusub oo u gaar ah isticmaalahan cusub, si loola socdo nidaamka studioId
+    const studio = await Studio.create({
+      studioName: username,
+      ownerId: createdUser._id,
+    });
+    createdUser.studioId = studio._id;
+    await createdUser.save();
 
     return res.status(201).json({
       message: "User registered successfully.",
