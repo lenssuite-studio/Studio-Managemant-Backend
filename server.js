@@ -9,6 +9,7 @@ import cookieParser from "cookie-parser"; // 🌟 Diyaar
 import AddCustomer from "./models/AddCustomer.js";
 import AuditLog from "./models/AuditLog.js";
 import PendingChange from "./models/PendingChange.js";
+import Expense from "./models/Expense.js";
 import { protect, authorize } from "./middleware/authMiddleware.js";
 import { attachTenant } from "./middleware/tenantMiddleware.js";
 import {
@@ -996,17 +997,181 @@ app.get(
         count: s.count,
       }));
 
+      // 🌟 PHASE 5 (financial tracking): expenses + net profit ee isla muddadan
+      const expenseMatch = { studioId: req.studioId, date: { $gte: fromDate, $lte: toDate } };
+
+      const [expenseSummary] = await Expense.aggregate([
+        { $match: expenseMatch },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
+      ]);
+
+      const expensesByCategoryRaw = await Expense.aggregate([
+        { $match: expenseMatch },
+        { $group: { _id: "$category", total: { $sum: "$amount" } } },
+        { $sort: { total: -1 } },
+      ]);
+
+      const totalPaid = summary?.totalPaid || 0;
+      const totalExpenses = expenseSummary?.total || 0;
+
       res.status(200).json({
         range: { from: fromDate, to: toDate },
         revenue: {
-          totalPaid: summary?.totalPaid || 0,
+          totalPaid,
           totalOutstanding: summary?.totalOutstanding || 0,
           orderCount: summary?.orderCount || 0,
         },
         photoCount: summary?.totalPhotos || 0,
         employeePerformance,
         serviceBreakdown,
+        expenses: {
+          total: totalExpenses,
+          byCategory: expensesByCategoryRaw.map((e) => ({ category: e._id, total: e.total })),
+        },
+        netProfit: totalPaid - totalExpenses,
       });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+// 🌟 PHASE 5: REVENUE TRENDS — monthly time series (revenue/expenses/netProfit)
+app.get(
+  "/api/Studio/Reports/Trend",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const months = Math.min(Math.max(parseInt(req.query.months, 10) || 6, 1), 24);
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+
+      const revenueByMonth = await AddCustomer.aggregate([
+        { $match: { studioId: req.studioId, createdAt: { $gte: start } } },
+        {
+          $group: {
+            _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
+            revenue: { $sum: "$amountPaid" },
+          },
+        },
+      ]);
+
+      const expensesByMonth = await Expense.aggregate([
+        { $match: { studioId: req.studioId, date: { $gte: start } } },
+        {
+          $group: {
+            _id: { year: { $year: "$date" }, month: { $month: "$date" } },
+            expenses: { $sum: "$amount" },
+          },
+        },
+      ]);
+
+      const revenueMap = new Map(revenueByMonth.map((r) => [`${r._id.year}-${r._id.month}`, r.revenue]));
+      const expenseMap = new Map(expensesByMonth.map((e) => [`${e._id.year}-${e._id.month}`, e.expenses]));
+
+      const trend = [];
+      for (let i = months - 1; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const key = `${d.getFullYear()}-${d.getMonth() + 1}`;
+        const revenue = revenueMap.get(key) || 0;
+        const expenses = expenseMap.get(key) || 0;
+        trend.push({
+          label: d.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+          year: d.getFullYear(),
+          month: d.getMonth() + 1,
+          revenue,
+          expenses,
+          netProfit: revenue - expenses,
+        });
+      }
+
+      res.status(200).json(trend);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+// ==========================================
+// 💵 PHASE 5: EXPENSE TRACKING (Studio Manager only)
+// ==========================================
+
+app.post(
+  "/api/Studio/Expenses",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const { category, description, amount, date } = req.body;
+
+      if (!amount || Number.isNaN(Number(amount))) {
+        return res.status(400).json({ error: "Fadlan geli qadar (amount) sax ah." });
+      }
+
+      const expense = await Expense.create({
+        studioId: req.studioId,
+        category,
+        description,
+        amount: Number(amount),
+        date: date ? new Date(date) : new Date(),
+        createdBy: req.userId,
+      });
+
+      res.status(201).json({
+        message: "✅ Kharashka si guul leh ayaa loo diiwaan geliyay!",
+        expense,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+app.get(
+  "/api/Studio/Expenses",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const filter = { studioId: req.studioId };
+
+      const { from, to } = req.query;
+      if (from && to) {
+        filter.date = { $gte: new Date(from), $lte: new Date(to) };
+      }
+
+      const expenses = await Expense.find(filter)
+        .populate("createdBy", "username")
+        .sort({ date: -1 });
+
+      res.status(200).json(expenses);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+app.delete(
+  "/api/Studio/Expenses/:id",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const expense = await Expense.findOneAndDelete({
+        _id: req.params.id,
+        studioId: req.studioId,
+      });
+
+      if (!expense) {
+        return res.status(404).json({ error: "Kharashkan lama helin ama fasax uma lihid" });
+      }
+
+      res.status(200).json({ message: "Kharashka waa la tirtiray", id: req.params.id });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
