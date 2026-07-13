@@ -920,6 +920,100 @@ app.get(
 );
 
 // ==========================================
+// 📊 PHASE 4: REPORTING API (Studio Manager only)
+// ==========================================
+
+app.get(
+  "/api/Studio/Reports",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const { from, to } = req.query;
+      if (!from || !to) {
+        return res.status(400).json({ error: "Fadlan sii 'from' iyo 'to' (taariikhaha)." });
+      }
+
+      const fromDate = new Date(from);
+      const toDate = new Date(to);
+      if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+        return res.status(400).json({ error: "Taariikhaha 'from'/'to' waa khaldan yihiin." });
+      }
+
+      const match = {
+        studioId: req.studioId,
+        createdAt: { $gte: fromDate, $lte: toDate },
+      };
+
+      const [summary] = await AddCustomer.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: null,
+            totalPaid: { $sum: "$amountPaid" },
+            totalOutstanding: { $sum: "$remainingAmount" },
+            totalPhotos: { $sum: "$numberOfPhotos" },
+            orderCount: { $sum: 1 },
+          },
+        },
+      ]);
+
+      const employeePerformanceRaw = await AddCustomer.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: "$userId",
+            orderCount: { $sum: 1 },
+            revenue: { $sum: "$amountPaid" },
+            photoCount: { $sum: "$numberOfPhotos" },
+          },
+        },
+        { $sort: { revenue: -1 } },
+      ]);
+
+      const userIds = employeePerformanceRaw.map((e) => e._id).filter(Boolean);
+      const users = await User.find({ _id: { $in: userIds } }).select("username role");
+      const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+      const employeePerformance = employeePerformanceRaw.map((e) => ({
+        userId: e._id,
+        username: userMap.get(String(e._id))?.username || "(deleted user)",
+        role: userMap.get(String(e._id))?.role || null,
+        orderCount: e.orderCount,
+        revenue: e.revenue,
+        photoCount: e.photoCount,
+      }));
+
+      const serviceBreakdownRaw = await AddCustomer.aggregate([
+        { $match: match },
+        { $group: { _id: "$PhotoType", count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+      ]);
+
+      const serviceBreakdown = serviceBreakdownRaw.map((s) => ({
+        photoType: s._id,
+        count: s.count,
+      }));
+
+      res.status(200).json({
+        range: { from: fromDate, to: toDate },
+        revenue: {
+          totalPaid: summary?.totalPaid || 0,
+          totalOutstanding: summary?.totalOutstanding || 0,
+          orderCount: summary?.orderCount || 0,
+        },
+        photoCount: summary?.totalPhotos || 0,
+        employeePerformance,
+        serviceBreakdown,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+// ==========================================
 // 🚀 MONGOOSE & SERVER BOOT
 // ==========================================
 const PORT = process.env.PORT || 5000;
