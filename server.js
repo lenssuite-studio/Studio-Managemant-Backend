@@ -372,7 +372,6 @@ app.post("/api/Customer/AddCustomer", protect, attachTenant, async (req, res) =>
       customer: NewCustomer,
     });
   } catch (error) {
-    console.error("DEBUG AddCustomer error:", error);
     res
       .status(500)
       .json({ error: "Cilad ayaa dhacday xilliga kaydinta macmiilka" });

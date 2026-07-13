@@ -3,6 +3,7 @@ import jwt from "jsonwebtoken";
 import User from "../models/User.js";
 import Studio from "../models/Studio.js";
 import crypto from "crypto";
+import  "dotenv/config"
 // 1. Waxaan meesha ka saarnay nodemailer waxaanan soo ragnay Resend
 import { Resend } from "resend";
 
