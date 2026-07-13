@@ -36,6 +36,12 @@ const pendingChangeSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       required: true,
     },
+    reason: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+      default: null,
+    },
     status: {
       type: String,
       enum: ["pending", "approved", "rejected"],

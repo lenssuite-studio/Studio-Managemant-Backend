@@ -54,6 +54,13 @@ const AddCustomerSchem = new mongoose.Schema(
       default: "Pending",
     },
 
+    paymentMethod: {
+      type: String,
+      enum: ["Cash", "Edahab", "SAAD"],
+      required: true,
+      default: "Cash",
+    },
+
     amountPaid: {
       type: Number,
       default: 0,

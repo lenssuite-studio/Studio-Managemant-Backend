@@ -246,6 +246,7 @@ const AUDIT_FIELDS = [
   "customerType",
   "PhotoType",
   "status",
+  "paymentMethod",
   "amountPaid",
   "remainingAmount",
   "numberOfPhotos",
@@ -293,6 +294,11 @@ async function tryQueueEmployeeChange(req, res, customer, actionType, proposedCh
     return true;
   }
 
+  const reason =
+    typeof req.body.reason === "string" && req.body.reason.trim()
+      ? req.body.reason.trim().slice(0, 500)
+      : null;
+
   const pendingChange = await PendingChange.create({
     studioId: req.studioId,
     customerId: customer._id,
@@ -300,6 +306,7 @@ async function tryQueueEmployeeChange(req, res, customer, actionType, proposedCh
     actionType,
     proposedChanges,
     originalSnapshot: snapshotCustomer(customer),
+    reason,
   });
 
   await AuditLog.create({
@@ -329,6 +336,7 @@ app.post("/api/Customer/AddCustomer", protect, attachTenant, async (req, res) =>
       status,
       customerType,
       PhotoType,
+      paymentMethod,
       amountPaid,
       remainingAmount,
       numberOfPhotos,
@@ -343,6 +351,7 @@ app.post("/api/Customer/AddCustomer", protect, attachTenant, async (req, res) =>
       status,
       customerType,
       PhotoType,
+      paymentMethod,
       amountPaid,
       remainingAmount,
       numberOfPhotos,
@@ -363,6 +372,7 @@ app.post("/api/Customer/AddCustomer", protect, attachTenant, async (req, res) =>
       customer: NewCustomer,
     });
   } catch (error) {
+    console.error("DEBUG AddCustomer error:", error);
     res
       .status(500)
       .json({ error: "Cilad ayaa dhacday xilliga kaydinta macmiilka" });
@@ -997,6 +1007,24 @@ app.get(
         count: s.count,
       }));
 
+      const paymentBreakdownRaw = await AddCustomer.aggregate([
+        { $match: match },
+        {
+          $group: {
+            _id: { $ifNull: ["$paymentMethod", "Not Recorded"] },
+            count: { $sum: 1 },
+            totalPaid: { $sum: "$amountPaid" },
+          },
+        },
+        { $sort: { totalPaid: -1 } },
+      ]);
+
+      const paymentBreakdown = paymentBreakdownRaw.map((p) => ({
+        paymentMethod: p._id,
+        count: p.count,
+        totalPaid: p.totalPaid,
+      }));
+
       // 🌟 PHASE 5 (financial tracking): expenses + net profit ee isla muddadan
       const expenseMatch = { studioId: req.studioId, date: { $gte: fromDate, $lte: toDate } };
 
@@ -1024,6 +1052,7 @@ app.get(
         photoCount: summary?.totalPhotos || 0,
         employeePerformance,
         serviceBreakdown,
+        paymentBreakdown,
         expenses: {
           total: totalExpenses,
           byCategory: expensesByCategoryRaw.map((e) => ({ category: e._id, total: e.total })),
