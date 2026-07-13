@@ -7,6 +7,8 @@ import cookieParser from "cookie-parser"; // 🌟 Diyaar
 
 // Models & Controls
 import AddCustomer from "./models/AddCustomer.js";
+import AuditLog from "./models/AuditLog.js";
+import PendingChange from "./models/PendingChange.js";
 import { protect, authorize } from "./middleware/authMiddleware.js";
 import { attachTenant } from "./middleware/tenantMiddleware.js";
 import {
@@ -235,6 +237,88 @@ app.get("/api/User/Profile", protect, attachTenant, getProfile);
 // 📸 STUDIO CUSTOMER ENDPOINTS
 // ==========================================
 
+// 🌟 PHASE 3 (fraud-prevention) helpers
+const AUDIT_FIELDS = [
+  "fullName",
+  "Phone",
+  "folderName",
+  "customerType",
+  "PhotoType",
+  "status",
+  "amountPaid",
+  "remainingAmount",
+  "numberOfPhotos",
+  "isArchived",
+];
+
+// isArchived ma aha field uu Edit-form-ku toos u bedelo — waxaa leh route gaar ah (Archive)
+const EDITABLE_FIELDS = AUDIT_FIELDS.filter((field) => field !== "isArchived");
+
+const ACTION_LABELS = { edit: "bedeli", delete: "tirtiri", archive: "kaydin (archive)" };
+
+function snapshotCustomer(customer) {
+  const snap = {};
+  for (const field of AUDIT_FIELDS) snap[field] = customer[field];
+  return snap;
+}
+
+function isStudioManagerRole(role) {
+  return role === "studio_manager" || role === "studio_admin";
+}
+
+// Hubi in order-ku uusan horey isbeddel u sugayn — haddii uu leeyahay, ha la
+// oggolaanin wax isbeddel cusub oo toos ah (Manager) ama codsi cusub (Employee)
+// intii aan la ansixin/diidin kii hore. Tan waxay ka hortagaysaa in la ansixiyo
+// isbeddel "pending" oo hore u noqday mid aan la socon (stale) haddii qofka
+// Manager-ka ahi si toos ah wax uga beddelo diiwaanka intii codsigu sugayay.
+async function hasPendingChange(customer) {
+  const existingPending = await PendingChange.findOne({
+    customerId: customer._id,
+    status: "pending",
+  });
+  return Boolean(existingPending);
+}
+
+// Haddii request-ku ka yimaado Employee: hubi in order-ku uusan Completed ahayn,
+// kadibna abuur PendingChange + AuditLog("requested") halkii ay ka ahaan lahayd
+// in AddCustomer-ka toos loo bedelo.
+// Wuxuu soo celiyaa `true` haddii uu jawaabta HTTP-ga dhammeeystiray (handled),
+// `false` haddii aysan jirin wax ka hor istaagay (route-ku ha sii wato Manager path-ka).
+async function tryQueueEmployeeChange(req, res, customer, actionType, proposedChanges, beforeSnapshot) {
+  if (customer.status === "Completed") {
+    res.status(403).json({
+      error: `Shaqaaluhu ma ${ACTION_LABELS[actionType]} karaan order-yada la dhammeeyay (Completed).`,
+    });
+    return true;
+  }
+
+  const pendingChange = await PendingChange.create({
+    studioId: req.studioId,
+    customerId: customer._id,
+    requestedBy: req.userId,
+    actionType,
+    proposedChanges,
+    originalSnapshot: snapshotCustomer(customer),
+  });
+
+  await AuditLog.create({
+    studioId: req.studioId,
+    customerId: customer._id,
+    userId: req.userId,
+    action: actionType,
+    outcome: "requested",
+    before: beforeSnapshot,
+    after: proposedChanges,
+  });
+
+  res.status(202).json({
+    pending: true,
+    message: "Codsigaaga waxaa loo diray maamulaha si loo ansixiyo.",
+    pendingChangeId: pendingChange._id,
+  });
+  return true;
+}
+
 app.post("/api/Customer/AddCustomer", protect, attachTenant, async (req, res) => {
   try {
     const {
@@ -262,6 +346,17 @@ app.post("/api/Customer/AddCustomer", protect, attachTenant, async (req, res) =>
       remainingAmount,
       numberOfPhotos,
     });
+
+    await AuditLog.create({
+      studioId: req.studioId,
+      customerId: NewCustomer._id,
+      userId: req.userId,
+      action: "create",
+      outcome: "applied",
+      before: null,
+      after: snapshotCustomer(NewCustomer),
+    });
+
     res.status(201).json({
       message: "✅ Macmiilka si guul leh ayaa loo kaydiyay!",
       customer: NewCustomer,
@@ -278,7 +373,29 @@ app.get("/api/Customer/List", protect, attachTenant, async (req, res) => {
     const customers = await AddCustomer.find({ studioId: req.studioId }).sort({
       createdAt: -1,
     });
-    res.status(200).json(customers);
+
+    // 🌟 Ku dar calaamadda "isbeddel sugaya" haddii mid jiro, si Dashboard-ku u ogaado
+    const pendingChanges = await PendingChange.find({
+      studioId: req.studioId,
+      status: "pending",
+    }).select("customerId actionType requestedBy createdAt");
+
+    const pendingByCustomer = new Map();
+    for (const pc of pendingChanges) {
+      pendingByCustomer.set(String(pc.customerId), {
+        actionType: pc.actionType,
+        requestedBy: pc.requestedBy,
+        createdAt: pc.createdAt,
+      });
+    }
+
+    const withPending = customers.map((c) => {
+      const obj = c.toObject();
+      obj.pendingChange = pendingByCustomer.get(String(c._id)) || null;
+      return obj;
+    });
+
+    res.status(200).json(withPending);
   } catch (error) {
     res
       .status(500)
@@ -298,7 +415,31 @@ app.delete("/api/Customer/Delete/:id", protect, attachTenant, async (req, res) =
         .json({ error: "Customer lama helin ama fasax u maku lihid" });
     }
 
+    if (await hasPendingChange(customer)) {
+      return res.status(409).json({
+        error: "Order-kan wuxuu leeyahay isbeddel sugaya ansixin. Fadlan marka hore ansixi ama diid isbeddelkaas.",
+      });
+    }
+
+    if (!isStudioManagerRole(req.role)) {
+      const before = snapshotCustomer(customer);
+      const handled = await tryQueueEmployeeChange(req, res, customer, "delete", null, before);
+      if (handled) return;
+    }
+
+    const before = snapshotCustomer(customer);
     await AddCustomer.findByIdAndDelete(req.params.id);
+
+    await AuditLog.create({
+      studioId: req.studioId,
+      customerId: customer._id,
+      userId: req.userId,
+      action: "delete",
+      outcome: "applied",
+      before,
+      after: null,
+    });
+
     res.status(200).json({
       message: "Customer waa la tirtiray",
       id: req.params.id,
@@ -319,14 +460,47 @@ app.put("/api/Customer/Edit/:id", protect, attachTenant, async (req, res) => {
       return res.status(404).json({ error: "Customer lama helin" });
     }
 
-    // 🌟 Ka saar goobaha tenant-ka si aan customer-ku loogu wareejin karin studio kale
-    const { studioId, userId, _id, ...safeUpdates } = req.body;
+    if (await hasPendingChange(customer)) {
+      return res.status(409).json({
+        error: "Order-kan wuxuu leeyahay isbeddel sugaya ansixin. Fadlan marka hore ansixi ama diid isbeddelkaas.",
+      });
+    }
+
+    // 🌟 Kaliya goobaha dhabta ah ee la ogol yahay in la bedelo ayaa la aqbalayaa
+    // (halkii safeUpdates laga dhigi lahaa "wax kasta oo aan tenant ahayn ee body-ga ku jira"),
+    // si aan diiwaanka audit-ka ugu dari qiyamo aan macno lahayn (createdAt, __v, pendingChange, iwm.)
+    const safeUpdates = {};
+    for (const field of EDITABLE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        safeUpdates[field] = req.body[field];
+      }
+    }
+
+    if (!isStudioManagerRole(req.role)) {
+      const before = {};
+      for (const key of Object.keys(safeUpdates)) before[key] = customer[key];
+      const handled = await tryQueueEmployeeChange(req, res, customer, "edit", safeUpdates, before);
+      if (handled) return;
+    }
+
+    const before = {};
+    for (const key of Object.keys(safeUpdates)) before[key] = customer[key];
 
     const updatedCustomer = await AddCustomer.findByIdAndUpdate(
       req.params.id,
       safeUpdates,
       { returnDocument: "after" },
     );
+
+    await AuditLog.create({
+      studioId: req.studioId,
+      customerId: customer._id,
+      userId: req.userId,
+      action: "edit",
+      outcome: "applied",
+      before,
+      after: safeUpdates,
+    });
 
     res.status(200).json(updatedCustomer);
   } catch (error) {
@@ -347,11 +521,41 @@ app.put("/api/Customer/Archive/:id", protect, attachTenant, async (req, res) => 
         .json({ error: "Macmiilkan lama helin ama fasax u maku lihid!" });
     }
 
+    if (await hasPendingChange(customer)) {
+      return res.status(409).json({
+        error: "Order-kan wuxuu leeyahay isbeddel sugaya ansixin. Fadlan marka hore ansixi ama diid isbeddelkaas.",
+      });
+    }
+
+    if (!isStudioManagerRole(req.role)) {
+      const before = { isArchived: customer.isArchived };
+      const handled = await tryQueueEmployeeChange(
+        req,
+        res,
+        customer,
+        "archive",
+        { isArchived: true },
+        before,
+      );
+      if (handled) return;
+    }
+
+    const before = { isArchived: customer.isArchived };
     const updatedCustomer = await AddCustomer.findByIdAndUpdate(
       req.params.id,
       { isArchived: true },
       { returnDocument: "after" },
     );
+
+    await AuditLog.create({
+      studioId: req.studioId,
+      customerId: customer._id,
+      userId: req.userId,
+      action: "archive",
+      outcome: "applied",
+      before,
+      after: { isArchived: true },
+    });
 
     res.status(200).json(updatedCustomer);
   } catch (error) {
@@ -534,6 +738,181 @@ app.delete(
         message: "Shaqaalaha waa la tirtiray",
         id: req.params.id,
       });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+// ==========================================
+// ✅ FRAUD-PREVENTION: PENDING CHANGES (Studio Manager only)
+// ==========================================
+
+app.get(
+  "/api/Studio/PendingChanges",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const pendingChanges = await PendingChange.find({
+        studioId: req.studioId,
+        status: "pending",
+      })
+        .populate("requestedBy", "username email")
+        .populate("customerId", "fullName folderName status")
+        .sort({ createdAt: -1 });
+
+      res.status(200).json(pendingChanges);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+app.put(
+  "/api/Studio/PendingChanges/Approve/:id",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const pendingChange = await PendingChange.findOne({
+        _id: req.params.id,
+        studioId: req.studioId,
+        status: "pending",
+      });
+
+      if (!pendingChange) {
+        return res.status(404).json({
+          error: "Pending change lama helin ama horey ayaa loo fasaxay/diiday",
+        });
+      }
+
+      const customer = await AddCustomer.findOne({
+        _id: pendingChange.customerId,
+        studioId: req.studioId,
+      });
+
+      if (!customer) {
+        return res.status(404).json({ error: "Order-ka asalka ah lama helin" });
+      }
+
+      let before = null;
+      let after = null;
+
+      if (pendingChange.actionType === "edit") {
+        before = {};
+        after = {};
+        for (const key of Object.keys(pendingChange.proposedChanges || {})) {
+          before[key] = customer[key];
+          after[key] = pendingChange.proposedChanges[key];
+          customer[key] = pendingChange.proposedChanges[key];
+        }
+        await customer.save();
+      } else if (pendingChange.actionType === "archive") {
+        before = { isArchived: customer.isArchived };
+        after = { isArchived: true };
+        customer.isArchived = true;
+        await customer.save();
+      } else if (pendingChange.actionType === "delete") {
+        before = snapshotCustomer(customer);
+        after = null;
+        await AddCustomer.findByIdAndDelete(customer._id);
+      }
+
+      pendingChange.status = "approved";
+      pendingChange.reviewedBy = req.userId;
+      pendingChange.reviewedAt = new Date();
+      await pendingChange.save();
+
+      await AuditLog.create({
+        studioId: req.studioId,
+        customerId: pendingChange.customerId,
+        userId: req.userId,
+        action: pendingChange.actionType,
+        outcome: "approved",
+        before,
+        after,
+      });
+
+      res.status(200).json({
+        message: "Isbeddelka waa la ansixiyay!",
+        pendingChange,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+app.put(
+  "/api/Studio/PendingChanges/Reject/:id",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const pendingChange = await PendingChange.findOne({
+        _id: req.params.id,
+        studioId: req.studioId,
+        status: "pending",
+      });
+
+      if (!pendingChange) {
+        return res.status(404).json({
+          error: "Pending change lama helin ama horey ayaa loo fasaxay/diiday",
+        });
+      }
+
+      pendingChange.status = "rejected";
+      pendingChange.reviewedBy = req.userId;
+      pendingChange.reviewedAt = new Date();
+      await pendingChange.save();
+
+      await AuditLog.create({
+        studioId: req.studioId,
+        customerId: pendingChange.customerId,
+        userId: req.userId,
+        action: pendingChange.actionType,
+        outcome: "rejected",
+        before: pendingChange.originalSnapshot,
+        after: pendingChange.proposedChanges,
+      });
+
+      res.status(200).json({
+        message: "Isbeddelka waa la diiday.",
+        pendingChange,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+// ==========================================
+// 🕵️ FRAUD-PREVENTION: ACTIVITY HISTORY API (Studio Manager only)
+// ==========================================
+
+app.get(
+  "/api/Studio/ActivityHistory",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const filter = { studioId: req.studioId };
+      if (req.query.customerId) {
+        filter.customerId = req.query.customerId;
+      }
+
+      const history = await AuditLog.find(filter)
+        .populate("userId", "username email role")
+        .populate("customerId", "fullName folderName")
+        .sort({ createdAt: -1 })
+        .limit(200);
+
+      res.status(200).json(history);
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
