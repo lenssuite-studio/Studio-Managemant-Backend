@@ -7,7 +7,7 @@ import cookieParser from "cookie-parser"; // 🌟 Diyaar
 
 // Models & Controls
 import AddCustomer from "./models/AddCustomer.js";
-import { protect } from "./middleware/authMiddleware.js";
+import { protect, authorize } from "./middleware/authMiddleware.js";
 import { attachTenant } from "./middleware/tenantMiddleware.js";
 import {
   loginUser,
@@ -137,7 +137,9 @@ app.get("/api/Admin/Studios", protect, async (req, res) => {
         .json({ error: "Access Denied: Superadmin oo kaliya!" });
     }
 
-    const studios = await User.find({ role: "studio_admin" })
+    const studios = await User.find({
+      role: { $in: ["studio_manager", "studio_admin"] },
+    })
       .select("-password")
       .sort({ createdAt: -1 });
 
@@ -172,15 +174,16 @@ app.get("/api/Admin/Stats", protect, async (req, res) => {
         .status(403)
         .json({ error: "Access Denied: Superadmin oo kaliya!" });
     }
-    const totalStudio = await User.countDocuments({ role: "studio_admin" });
+    const studioRoles = ["studio_manager", "studio_admin"];
+    const totalStudio = await User.countDocuments({ role: { $in: studioRoles } });
     const totalCustomers = await AddCustomer.countDocuments({});
 
     const activeStudios = await User.countDocuments({
-      role: "studio_admin",
+      role: { $in: studioRoles },
       isActive: true,
     });
     const inactiveStudios = await User.countDocuments({
-      role: "studio_admin",
+      role: { $in: studioRoles },
       isActive: false,
     });
 
@@ -353,6 +356,81 @@ app.put("/api/Customer/Archive/:id", protect, attachTenant, async (req, res) => 
     res.status(500).json({ error: error.message });
   }
 });
+
+// ==========================================
+// 🧑‍💼 STUDIO TEAM ENDPOINTS (Studio Manager only)
+// ==========================================
+
+app.post(
+  "/api/Studio/Employees",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const { username, email, password } = req.body;
+
+      if (!username || !email || !password) {
+        return res.status(400).json({
+          error: "Fadlan buuxi username, email, iyo password.",
+        });
+      }
+
+      const existingUser = await User.findOne({ email: email.toLowerCase() });
+      if (existingUser) {
+        return res
+          .status(400)
+          .json({ error: "Email-kan horey ayuu u diiwaan gashanaa." });
+      }
+
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const employee = await User.create({
+        username,
+        email: email.toLowerCase(),
+        password: hashedPassword,
+        role: "employee",
+        studioId: req.studioId,
+        isActive: true,
+      });
+
+      res.status(201).json({
+        message: "✅ Shaqaalaha si guul leh ayaa loo daray!",
+        employee: {
+          _id: employee._id,
+          username: employee.username,
+          email: employee.email,
+          role: employee.role,
+          isActive: employee.isActive,
+          createdAt: employee.createdAt,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+app.get(
+  "/api/Studio/Employees",
+  protect,
+  authorize("studio_manager", "studio_admin"),
+  attachTenant,
+  async (req, res) => {
+    try {
+      const employees = await User.find({
+        studioId: req.studioId,
+        role: "employee",
+      })
+        .select("-password")
+        .sort({ createdAt: -1 });
+
+      res.status(200).json(employees);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
 
 // ==========================================
 // 🚀 MONGOOSE & SERVER BOOT

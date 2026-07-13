@@ -96,6 +96,12 @@ export const loginUser = async (req, res) => {
       return res.status(400).json({ message: "Invalid email or password." });
     }
 
+    // 🌟 PHASE 2: Beddel qiimihii hore ee role-ka (studio_admin) mid cusub (studio_manager)
+    // kahor inta aan la keydin, si aan khalad enum-validation ah u dhicin.
+    if (user.role === "studio_admin") {
+      user.role = "studio_manager";
+    }
+
     user.lastLogin = new Date();
     await user.save();
 

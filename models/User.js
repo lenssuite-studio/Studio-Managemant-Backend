@@ -24,8 +24,11 @@ const userSchema = new mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ["superadmin", "studio_admin"],
-      default: "studio_admin",
+      // 🌟 PHASE 2: studio_admin waa la beddelay studio_manager, employee waa cusub.
+      // studio_admin waxa lagu hayaa enum-ka si ay xogtii hore u sii shaqeyso ilaa
+      // migration-ka la socodsiiyo (fiiri scripts/renameStudioAdminRole.js).
+      enum: ["superadmin", "studio_manager", "employee", "studio_admin"],
+      default: "studio_manager",
     },
     studioId: {
       type: mongoose.Schema.Types.ObjectId,

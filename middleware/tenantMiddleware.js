@@ -23,14 +23,30 @@ export const attachTenant = async (req, res, next) => {
       return res.status(401).json({ error: "Fasax ma lihid, isticmaale lama helin" });
     }
 
+    let needsSave = false;
+
+    // 🌟 PHASE 2: Qiimihii hore ee role-ka (studio_admin) beddel mid cusub (studio_manager).
+    // Defense-in-depth — loginUser hore ayuu u sameeyaa tan, halkan waa backstop.
+    if (user.role === "studio_admin") {
+      user.role = "studio_manager";
+      needsSave = true;
+    }
+
     if (!user.studioId) {
+      // Shaqaale (employee) marnaba isma abuurin karo studio — waa in la xiraa mid hore u jira.
+      if (user.role === "employee") {
+        return res.status(403).json({
+          error: "Shaqaalahan lama xirin studio — la xiriir maamulaha studio-ga.",
+        });
+      }
+
       const studio = await Studio.create({
         studioName: user.username,
         ownerId: user._id,
       });
 
       user.studioId = studio._id;
-      await user.save();
+      needsSave = true;
 
       // Dib u xir xogtii hore ee AddCustomer ee uu lahaa user-kan, kuwa maqan studioId oo kaliya
       await AddCustomer.updateMany(
@@ -39,7 +55,12 @@ export const attachTenant = async (req, res, next) => {
       );
     }
 
+    if (needsSave) {
+      await user.save();
+    }
+
     req.studioId = user.studioId;
+    req.role = user.role; // Hubi in codsigan gudihiisa uu wato qiimihii role-ka ee la saxay
     next();
   } catch (error) {
     res.status(500).json({ error: "Cilad ayaa dhacday xilliga xaqiijinta studio-ga" });
