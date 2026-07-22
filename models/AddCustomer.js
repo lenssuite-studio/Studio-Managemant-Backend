@@ -60,14 +60,6 @@ const AddCustomerSchem = new mongoose.Schema(
       required: true,
       default: "Cash",
     },
-    normalPhotosCount: {
-      type: Number,
-      default: 0,
-    },
-    vipPhotosCount: {
-      type: Number,
-      default: 0,
-    },
 
     amountPaid: {
       type: Number,
@@ -85,6 +77,31 @@ const AddCustomerSchem = new mongoose.Schema(
       type: Boolean,
       default: false, // Marka macmiilka la abuurayo marka hore la archive-gareyn maayo
     },
+
+    // New update
+
+    vipTierLevel: {
+      type: String,
+      enum: ["VIP_1", "VIP_2", "VIP_3"],
+      default: "VIP_1",
+    },
+
+    normalPhotosCount: {
+      type: Number,
+      default: 0,
+    },
+    vipPhotosCount: {
+      type: Number,
+      default: 0,
+    },
+
+    // --- EXP ---
+    expPhotosCount: { type: Number, default: 0 },
+    expExtraCharge: { type: Number, default: 0 },
+
+    cashAmount: { type: Number, default: 0 },
+    zaadAmount: { type: Number, default: 0 },
+    edahabAmount: { type: Number, default: 0 },
   },
   { timestamps: true },
 );
