@@ -60,6 +60,14 @@ const AddCustomerSchem = new mongoose.Schema(
       required: true,
       default: "Cash",
     },
+    normalPhotosCount: {
+      type: Number,
+      default: 0,
+    },
+    vipPhotosCount: {
+      type: Number,
+      default: 0,
+    },
 
     amountPaid: {
       type: Number,
