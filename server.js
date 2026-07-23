@@ -20,7 +20,7 @@ import {
 } from "./controllers/userController.js";
 import User from "./models/User.js";
 import bcrypt from "bcryptjs";
- import { forgotPassword, resetPassword} from "./controllers/userController.js";
+import { forgotPassword, resetPassword } from "./controllers/userController.js";
 
 dotenv.config();
 
@@ -69,7 +69,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
 });
- /// forgotPassword and resetPasswor
+/// forgotPassword and resetPasswor
 app.post("/api/User/forgotPassword", forgotPassword);
 app.post("/api/User/resetPassword/:token", resetPassword);
 
@@ -179,7 +179,9 @@ app.get("/api/Admin/Stats", protect, async (req, res) => {
         .json({ error: "Access Denied: Superadmin oo kaliya!" });
     }
     const studioRoles = ["studio_manager", "studio_admin"];
-    const totalStudio = await User.countDocuments({ role: { $in: studioRoles } });
+    const totalStudio = await User.countDocuments({
+      role: { $in: studioRoles },
+    });
     const totalCustomers = await AddCustomer.countDocuments({});
 
     const activeStudios = await User.countDocuments({
@@ -256,7 +258,11 @@ const AUDIT_FIELDS = [
 // isArchived ma aha field uu Edit-form-ku toos u bedelo — waxaa leh route gaar ah (Archive)
 const EDITABLE_FIELDS = AUDIT_FIELDS.filter((field) => field !== "isArchived");
 
-const ACTION_LABELS = { edit: "bedeli", delete: "tirtiri", archive: "kaydin (archive)" };
+const ACTION_LABELS = {
+  edit: "bedeli",
+  delete: "tirtiri",
+  archive: "kaydin (archive)",
+};
 
 function snapshotCustomer(customer) {
   const snap = {};
@@ -286,7 +292,14 @@ async function hasPendingChange(customer) {
 // in AddCustomer-ka toos loo bedelo.
 // Wuxuu soo celiyaa `true` haddii uu jawaabta HTTP-ga dhammeeystiray (handled),
 // `false` haddii aysan jirin wax ka hor istaagay (route-ku ha sii wato Manager path-ka).
-async function tryQueueEmployeeChange(req, res, customer, actionType, proposedChanges, beforeSnapshot) {
+async function tryQueueEmployeeChange(
+  req,
+  res,
+  customer,
+  actionType,
+  proposedChanges,
+  beforeSnapshot,
+) {
   if (customer.status === "Completed") {
     res.status(403).json({
       error: `Shaqaaluhu ma ${ACTION_LABELS[actionType]} karaan order-yada la dhammeeyay (Completed).`,
@@ -327,56 +340,77 @@ async function tryQueueEmployeeChange(req, res, customer, actionType, proposedCh
   return true;
 }
 
-app.post("/api/Customer/AddCustomer", protect, attachTenant, async (req, res) => {
-  try {
-    const {
-      fullName,
-      Phone,
-      folderName,
-      status,
-      customerType,
-      PhotoType,
-      paymentMethod,
-      amountPaid,
-      remainingAmount,
-      numberOfPhotos,
-    } = req.body;
+app.post(
+  "/api/Customer/AddCustomer",
+  protect,
+  attachTenant,
+  async (req, res) => {
+    try {
+      const {
+        fullName,
+        Phone,
+        folderName,
+        status,
+        customerType,
+        PhotoType,
+        vipTierLevel, // 👈 Cusub
+        paymentMethod,
+        amountPaid,
+        remainingAmount,
+        numberOfPhotos,
+        normalPhotosCount, // 👈 Cusub
+        vipPhotosCount, // 👈 Cusub
+        expPhotosCount, // 👈 Cusub
+        expExtraCharge, // 👈 Cusub
+        cashAmount, // 👈 Cusub
+        zaadAmount, // 👈 Cusub
+        edahabAmount, // 👈 Cusub
+      } = req.body;
 
-    const NewCustomer = await AddCustomer.create({
-      userId: req.userId,
-      studioId: req.studioId,
-      fullName,
-      Phone,
-      folderName,
-      status,
-      customerType,
-      PhotoType,
-      paymentMethod,
-      amountPaid,
-      remainingAmount,
-      numberOfPhotos,
-    });
+      const NewCustomer = await AddCustomer.create({
+        userId: req.userId,
+        studioId: req.studioId,
+        fullName,
+        Phone,
+        folderName,
+        status,
+        customerType,
+        PhotoType,
+        vipTierLevel: vipTierLevel || "VIP_1",
+        paymentMethod,
+        amountPaid: Number(amountPaid) || 0,
+        remainingAmount: Number(remainingAmount) || 0,
+        numberOfPhotos: Number(numberOfPhotos) || 0,
+        normalPhotosCount: Number(normalPhotosCount) || 0,
+        vipPhotosCount: Number(vipPhotosCount) || 0,
+        expPhotosCount: Number(expPhotosCount) || 0,
+        expExtraCharge: Number(expExtraCharge) || 0,
+        cashAmount: Number(cashAmount) || 0,
+        zaadAmount: Number(zaadAmount) || 0,
+        edahabAmount: Number(edahabAmount) || 0,
+      });
 
-    await AuditLog.create({
-      studioId: req.studioId,
-      customerId: NewCustomer._id,
-      userId: req.userId,
-      action: "create",
-      outcome: "applied",
-      before: null,
-      after: snapshotCustomer(NewCustomer),
-    });
+      await AuditLog.create({
+        studioId: req.studioId,
+        customerId: NewCustomer._id,
+        userId: req.userId,
+        action: "create",
+        outcome: "applied",
+        before: null,
+        after: snapshotCustomer(NewCustomer),
+      });
 
-    res.status(201).json({
-      message: "✅ Macmiilka si guul leh ayaa loo kaydiyay!",
-      customer: NewCustomer,
-    });
-  } catch (error) {
-    res
-      .status(500)
-      .json({ error: "Cilad ayaa dhacday xilliga kaydinta macmiilka" });
-  }
-});
+      res.status(201).json({
+        message: "✅ Macmiilka si guul leh ayaa loo kaydiyay!",
+        customer: NewCustomer,
+      });
+    } catch (error) {
+      res
+        .status(500)
+        .json({ error: "Cilad ayaa dhacday xilliga kaydinta macmiilka" });
+    }
+  },
+);
 
 app.get("/api/Customer/List", protect, attachTenant, async (req, res) => {
   try {
@@ -413,51 +447,64 @@ app.get("/api/Customer/List", protect, attachTenant, async (req, res) => {
   }
 });
 
-app.delete("/api/Customer/Delete/:id", protect, attachTenant, async (req, res) => {
-  try {
-    const customer = await AddCustomer.findOne({
-      _id: req.params.id,
-      studioId: req.studioId,
-    });
-    if (!customer) {
-      return res
-        .status(401)
-        .json({ error: "Customer lama helin ama fasax u maku lihid" });
-    }
-
-    if (await hasPendingChange(customer)) {
-      return res.status(409).json({
-        error: "Order-kan wuxuu leeyahay isbeddel sugaya ansixin. Fadlan marka hore ansixi ama diid isbeddelkaas.",
+app.delete(
+  "/api/Customer/Delete/:id",
+  protect,
+  attachTenant,
+  async (req, res) => {
+    try {
+      const customer = await AddCustomer.findOne({
+        _id: req.params.id,
+        studioId: req.studioId,
       });
-    }
+      if (!customer) {
+        return res
+          .status(401)
+          .json({ error: "Customer lama helin ama fasax u maku lihid" });
+      }
 
-    if (!isStudioManagerRole(req.role)) {
+      if (await hasPendingChange(customer)) {
+        return res.status(409).json({
+          error:
+            "Order-kan wuxuu leeyahay isbeddel sugaya ansixin. Fadlan marka hore ansixi ama diid isbeddelkaas.",
+        });
+      }
+
+      if (!isStudioManagerRole(req.role)) {
+        const before = snapshotCustomer(customer);
+        const handled = await tryQueueEmployeeChange(
+          req,
+          res,
+          customer,
+          "delete",
+          null,
+          before,
+        );
+        if (handled) return;
+      }
+
       const before = snapshotCustomer(customer);
-      const handled = await tryQueueEmployeeChange(req, res, customer, "delete", null, before);
-      if (handled) return;
+      await AddCustomer.findByIdAndDelete(req.params.id);
+
+      await AuditLog.create({
+        studioId: req.studioId,
+        customerId: customer._id,
+        userId: req.userId,
+        action: "delete",
+        outcome: "applied",
+        before,
+        after: null,
+      });
+
+      res.status(200).json({
+        message: "Customer waa la tirtiray",
+        id: req.params.id,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
     }
-
-    const before = snapshotCustomer(customer);
-    await AddCustomer.findByIdAndDelete(req.params.id);
-
-    await AuditLog.create({
-      studioId: req.studioId,
-      customerId: customer._id,
-      userId: req.userId,
-      action: "delete",
-      outcome: "applied",
-      before,
-      after: null,
-    });
-
-    res.status(200).json({
-      message: "Customer waa la tirtiray",
-      id: req.params.id,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+  },
+);
 
 app.put("/api/Customer/Edit/:id", protect, attachTenant, async (req, res) => {
   try {
@@ -472,7 +519,8 @@ app.put("/api/Customer/Edit/:id", protect, attachTenant, async (req, res) => {
 
     if (await hasPendingChange(customer)) {
       return res.status(409).json({
-        error: "Order-kan wuxuu leeyahay isbeddel sugaya ansixin. Fadlan marka hore ansixi ama diid isbeddelkaas.",
+        error:
+          "Order-kan wuxuu leeyahay isbeddel sugaya ansixin. Fadlan marka hore ansixi ama diid isbeddelkaas.",
       });
     }
 
@@ -489,7 +537,14 @@ app.put("/api/Customer/Edit/:id", protect, attachTenant, async (req, res) => {
     if (!isStudioManagerRole(req.role)) {
       const before = {};
       for (const key of Object.keys(safeUpdates)) before[key] = customer[key];
-      const handled = await tryQueueEmployeeChange(req, res, customer, "edit", safeUpdates, before);
+      const handled = await tryQueueEmployeeChange(
+        req,
+        res,
+        customer,
+        "edit",
+        safeUpdates,
+        before,
+      );
       if (handled) return;
     }
 
@@ -518,60 +573,66 @@ app.put("/api/Customer/Edit/:id", protect, attachTenant, async (req, res) => {
   }
 });
 
-app.put("/api/Customer/Archive/:id", protect, attachTenant, async (req, res) => {
-  try {
-    const customer = await AddCustomer.findOne({
-      _id: req.params.id,
-      studioId: req.studioId,
-    });
-
-    if (!customer) {
-      return res
-        .status(404)
-        .json({ error: "Macmiilkan lama helin ama fasax u maku lihid!" });
-    }
-
-    if (await hasPendingChange(customer)) {
-      return res.status(409).json({
-        error: "Order-kan wuxuu leeyahay isbeddel sugaya ansixin. Fadlan marka hore ansixi ama diid isbeddelkaas.",
+app.put(
+  "/api/Customer/Archive/:id",
+  protect,
+  attachTenant,
+  async (req, res) => {
+    try {
+      const customer = await AddCustomer.findOne({
+        _id: req.params.id,
+        studioId: req.studioId,
       });
-    }
 
-    if (!isStudioManagerRole(req.role)) {
+      if (!customer) {
+        return res
+          .status(404)
+          .json({ error: "Macmiilkan lama helin ama fasax u maku lihid!" });
+      }
+
+      if (await hasPendingChange(customer)) {
+        return res.status(409).json({
+          error:
+            "Order-kan wuxuu leeyahay isbeddel sugaya ansixin. Fadlan marka hore ansixi ama diid isbeddelkaas.",
+        });
+      }
+
+      if (!isStudioManagerRole(req.role)) {
+        const before = { isArchived: customer.isArchived };
+        const handled = await tryQueueEmployeeChange(
+          req,
+          res,
+          customer,
+          "archive",
+          { isArchived: true },
+          before,
+        );
+        if (handled) return;
+      }
+
       const before = { isArchived: customer.isArchived };
-      const handled = await tryQueueEmployeeChange(
-        req,
-        res,
-        customer,
-        "archive",
+      const updatedCustomer = await AddCustomer.findByIdAndUpdate(
+        req.params.id,
         { isArchived: true },
-        before,
+        { returnDocument: "after" },
       );
-      if (handled) return;
+
+      await AuditLog.create({
+        studioId: req.studioId,
+        customerId: customer._id,
+        userId: req.userId,
+        action: "archive",
+        outcome: "applied",
+        before,
+        after: { isArchived: true },
+      });
+
+      res.status(200).json(updatedCustomer);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
     }
-
-    const before = { isArchived: customer.isArchived };
-    const updatedCustomer = await AddCustomer.findByIdAndUpdate(
-      req.params.id,
-      { isArchived: true },
-      { returnDocument: "after" },
-    );
-
-    await AuditLog.create({
-      studioId: req.studioId,
-      customerId: customer._id,
-      userId: req.userId,
-      action: "archive",
-      outcome: "applied",
-      before,
-      after: { isArchived: true },
-    });
-
-    res.status(200).json(updatedCustomer);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+  },
+);
 
 // ==========================================
 // 🧑‍💼 STUDIO TEAM ENDPOINTS (Studio Manager only)
@@ -664,7 +725,9 @@ app.put(
       });
 
       if (!employee) {
-        return res.status(404).json({ error: "Shaqaale lama helin ama fasax uma lihid" });
+        return res
+          .status(404)
+          .json({ error: "Shaqaale lama helin ama fasax uma lihid" });
       }
 
       employee.isActive = !employee.isActive;
@@ -701,7 +764,9 @@ app.put(
       });
 
       if (!employee) {
-        return res.status(404).json({ error: "Shaqaale lama helin ama fasax uma lihid" });
+        return res
+          .status(404)
+          .json({ error: "Shaqaale lama helin ama fasax uma lihid" });
       }
 
       const { username, email } = req.body;
@@ -741,7 +806,9 @@ app.delete(
       });
 
       if (!employee) {
-        return res.status(404).json({ error: "Shaqaale lama helin ama fasax uma lihid" });
+        return res
+          .status(404)
+          .json({ error: "Shaqaale lama helin ama fasax uma lihid" });
       }
 
       res.status(200).json({
@@ -942,13 +1009,17 @@ app.get(
     try {
       const { from, to } = req.query;
       if (!from || !to) {
-        return res.status(400).json({ error: "Fadlan sii 'from' iyo 'to' (taariikhaha)." });
+        return res
+          .status(400)
+          .json({ error: "Fadlan sii 'from' iyo 'to' (taariikhaha)." });
       }
 
       const fromDate = new Date(from);
       const toDate = new Date(to);
       if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
-        return res.status(400).json({ error: "Taariikhaha 'from'/'to' waa khaldan yihiin." });
+        return res
+          .status(400)
+          .json({ error: "Taariikhaha 'from'/'to' waa khaldan yihiin." });
       }
 
       const match = {
@@ -983,7 +1054,9 @@ app.get(
       ]);
 
       const userIds = employeePerformanceRaw.map((e) => e._id).filter(Boolean);
-      const users = await User.find({ _id: { $in: userIds } }).select("username role");
+      const users = await User.find({ _id: { $in: userIds } }).select(
+        "username role",
+      );
       const userMap = new Map(users.map((u) => [String(u._id), u]));
 
       const employeePerformance = employeePerformanceRaw.map((e) => ({
@@ -1025,7 +1098,10 @@ app.get(
       }));
 
       // 🌟 PHASE 5 (financial tracking): expenses + net profit ee isla muddadan
-      const expenseMatch = { studioId: req.studioId, date: { $gte: fromDate, $lte: toDate } };
+      const expenseMatch = {
+        studioId: req.studioId,
+        date: { $gte: fromDate, $lte: toDate },
+      };
 
       const [expenseSummary] = await Expense.aggregate([
         { $match: expenseMatch },
@@ -1054,7 +1130,10 @@ app.get(
         paymentBreakdown,
         expenses: {
           total: totalExpenses,
-          byCategory: expensesByCategoryRaw.map((e) => ({ category: e._id, total: e.total })),
+          byCategory: expensesByCategoryRaw.map((e) => ({
+            category: e._id,
+            total: e.total,
+          })),
         },
         netProfit: totalPaid - totalExpenses,
       });
@@ -1072,15 +1151,25 @@ app.get(
   attachTenant,
   async (req, res) => {
     try {
-      const months = Math.min(Math.max(parseInt(req.query.months, 10) || 6, 1), 24);
+      const months = Math.min(
+        Math.max(parseInt(req.query.months, 10) || 6, 1),
+        24,
+      );
       const now = new Date();
-      const start = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+      const start = new Date(
+        now.getFullYear(),
+        now.getMonth() - (months - 1),
+        1,
+      );
 
       const revenueByMonth = await AddCustomer.aggregate([
         { $match: { studioId: req.studioId, createdAt: { $gte: start } } },
         {
           $group: {
-            _id: { year: { $year: "$createdAt" }, month: { $month: "$createdAt" } },
+            _id: {
+              year: { $year: "$createdAt" },
+              month: { $month: "$createdAt" },
+            },
             revenue: { $sum: "$amountPaid" },
           },
         },
@@ -1096,8 +1185,15 @@ app.get(
         },
       ]);
 
-      const revenueMap = new Map(revenueByMonth.map((r) => [`${r._id.year}-${r._id.month}`, r.revenue]));
-      const expenseMap = new Map(expensesByMonth.map((e) => [`${e._id.year}-${e._id.month}`, e.expenses]));
+      const revenueMap = new Map(
+        revenueByMonth.map((r) => [`${r._id.year}-${r._id.month}`, r.revenue]),
+      );
+      const expenseMap = new Map(
+        expensesByMonth.map((e) => [
+          `${e._id.year}-${e._id.month}`,
+          e.expenses,
+        ]),
+      );
 
       const trend = [];
       for (let i = months - 1; i >= 0; i--) {
@@ -1106,7 +1202,10 @@ app.get(
         const revenue = revenueMap.get(key) || 0;
         const expenses = expenseMap.get(key) || 0;
         trend.push({
-          label: d.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+          label: d.toLocaleDateString("en-US", {
+            month: "short",
+            year: "2-digit",
+          }),
           year: d.getFullYear(),
           month: d.getMonth() + 1,
           revenue,
@@ -1136,7 +1235,9 @@ app.post(
       const { category, description, amount, date } = req.body;
 
       if (!amount || Number.isNaN(Number(amount))) {
-        return res.status(400).json({ error: "Fadlan geli qadar (amount) sax ah." });
+        return res
+          .status(400)
+          .json({ error: "Fadlan geli qadar (amount) sax ah." });
       }
 
       const expense = await Expense.create({
@@ -1196,10 +1297,14 @@ app.delete(
       });
 
       if (!expense) {
-        return res.status(404).json({ error: "Kharashkan lama helin ama fasax uma lihid" });
+        return res
+          .status(404)
+          .json({ error: "Kharashkan lama helin ama fasax uma lihid" });
       }
 
-      res.status(200).json({ message: "Kharashka waa la tirtiray", id: req.params.id });
+      res
+        .status(200)
+        .json({ message: "Kharashka waa la tirtiray", id: req.params.id });
     } catch (error) {
       res.status(500).json({ error: error.message });
     }
