@@ -29,7 +29,7 @@ const AddCustomerSchem = new mongoose.Schema(
     customerType: {
       type: String,
       enum: ["VIP", "NORMAL"],
-      require: true,
+      required: true,
       default: "VIP",
     },
 
@@ -43,14 +43,14 @@ const AddCustomerSchem = new mongoose.Schema(
         "Certificate",
         "Wedding",
       ],
-      require: true,
+      required: true,
       default: "FullBody",
     },
 
     status: {
       type: String,
       enum: ["Pending", "Delivered", "Completed"],
-      require: true,
+      required: true,
       default: "Pending",
     },
 
@@ -75,10 +75,8 @@ const AddCustomerSchem = new mongoose.Schema(
     },
     isArchived: {
       type: Boolean,
-      default: false, // Marka macmiilka la abuurayo marka hore la archive-gareyn maayo
+      default: false,
     },
-
-    // New update
 
     vipTierLevel: {
       type: String,
@@ -95,7 +93,6 @@ const AddCustomerSchem = new mongoose.Schema(
       default: 0,
     },
 
-    // --- EXP ---
     expPhotosCount: { type: Number, default: 0 },
     expExtraCharge: { type: Number, default: 0 },
 
@@ -103,7 +100,7 @@ const AddCustomerSchem = new mongoose.Schema(
     zaadAmount: { type: Number, default: 0 },
     edahabAmount: { type: Number, default: 0 },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 AddCustomerSchem.index({ studioId: 1, createdAt: -1 });
