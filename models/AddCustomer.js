@@ -26,7 +26,12 @@ const AddCustomerSchem = new mongoose.Schema(
       required: true,
     },
 
-  
+    customerType: {
+      type: String,
+      enum: ["VIP", "NORMAL"],
+      required: true,
+      default: "VIP",
+    },
 
     PhotoType: {
       type: String,
@@ -47,6 +52,13 @@ const AddCustomerSchem = new mongoose.Schema(
       enum: ["Pending", "Delivered", "Completed"],
       required: true,
       default: "Pending",
+    },
+
+    paymentMethod: {
+      type: String,
+      enum: ["Cash", "Edahab", "SAAD"],
+      required: true,
+      default: "Cash",
     },
 
     amountPaid: {
@@ -88,7 +100,7 @@ const AddCustomerSchem = new mongoose.Schema(
     zaadAmount: { type: Number, default: 0 },
     edahabAmount: { type: Number, default: 0 },
   },
-  { timestamps: true },
+  { timestamps: true }
 );
 
 AddCustomerSchem.index({ studioId: 1, createdAt: -1 });
