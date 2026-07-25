@@ -226,7 +226,7 @@ app.post("/api/Admin/CreateFirstSuperadmin", async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
-});
+}); 
 
 // ==========================================
 // 🔐 AUTH ENDPOINTS
@@ -252,6 +252,14 @@ const AUDIT_FIELDS = [
   "amountPaid",
   "remainingAmount",
   "numberOfPhotos",
+  "vipTierLevel",
+  "vipPhotosCount",
+  "expPhotosCount",
+  "expExtraCharge",
+  "cashAmount",
+  "zaadAmount",
+  "edahabAmount",
+  "normalPhotosCount",
   "isArchived",
 ];
 
@@ -351,10 +359,10 @@ app.post(
         Phone,
         folderName,
         status,
-        customerType,
+        
         PhotoType,
         vipTierLevel, // 👈 Cusub
-        paymentMethod,
+       
         amountPaid,
         remainingAmount,
         numberOfPhotos,
