@@ -245,15 +245,23 @@ const AUDIT_FIELDS = [
   "fullName",
   "Phone",
   "folderName",
-  "customerType",
-  "PhotoType",
   "status",
+  "PhotoType",
   "paymentMethod",
   "amountPaid",
   "remainingAmount",
   "numberOfPhotos",
   "isArchived",
+  "vipTierLevel",
+  "normalPhotosCount",
+  "vipPhotosCount",
+  "expPhotosCount",
+  "expExtraCharge",
+  "cashAmount",
+  "zaadAmount",
+  "edahabAmount"
 ];
+
 
 // isArchived ma aha field uu Edit-form-ku toos u bedelo — waxaa leh route gaar ah (Archive)
 const EDITABLE_FIELDS = AUDIT_FIELDS.filter((field) => field !== "isArchived");
@@ -351,7 +359,6 @@ app.post(
         Phone,
         folderName,
         status,
-        customerType,
         PhotoType,
         vipTierLevel, // 👈 Cusub
         paymentMethod,
@@ -374,7 +381,6 @@ app.post(
         Phone,
         folderName,
         status,
-        customerType,
         PhotoType,
         vipTierLevel: vipTierLevel || "VIP_1",
         paymentMethod,
