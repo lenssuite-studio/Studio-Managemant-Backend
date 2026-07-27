@@ -1006,6 +1006,151 @@ app.get(
 // 📊 PHASE 4: REPORTING API (Studio Manager only)
 // ==========================================
 
+// app.get(
+//   "/api/Studio/Reports",
+//   protect,
+//   authorize("studio_manager", "studio_admin"),
+//   attachTenant,
+//   async (req, res) => {
+//     try {
+//       const { from, to } = req.query;
+//       if (!from || !to) {
+//         return res
+//           .status(400)
+//           .json({ error: "Fadlan sii 'from' iyo 'to' (taariikhaha)." });
+//       }
+
+//       const fromDate = new Date(from);
+//       const toDate = new Date(to);
+//       if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+//         return res
+//           .status(400)
+//           .json({ error: "Taariikhaha 'from'/'to' waa khaldan yihiin." });
+//       }
+
+//       const match = {
+//         studioId: req.studioId,
+//         createdAt: { $gte: fromDate, $lte: toDate },
+//       };
+
+//       const [summary] = await AddCustomer.aggregate([
+//         { $match: match },
+//         {
+//           $group: {
+//             _id: null,
+//             totalPaid: { $sum: "$amountPaid" },
+//             totalOutstanding: { $sum: "$remainingAmount" },
+//             totalPhotos: { $sum: "$numberOfPhotos" },
+//             orderCount: { $sum: 1 },
+//           },
+//         },
+//       ]);
+
+//       const employeePerformanceRaw = await AddCustomer.aggregate([
+//         { $match: match },
+//         {
+//           $group: {
+//             _id: "$userId",
+//             orderCount: { $sum: 1 },
+//             revenue: { $sum: "$amountPaid" },
+//             photoCount: { $sum: "$numberOfPhotos" },
+//           },
+//         },
+//         { $sort: { revenue: -1 } },
+//       ]);
+
+//       const userIds = employeePerformanceRaw.map((e) => e._id).filter(Boolean);
+//       const users = await User.find({ _id: { $in: userIds } }).select(
+//         "username role",
+//       );
+//       const userMap = new Map(users.map((u) => [String(u._id), u]));
+
+//       const employeePerformance = employeePerformanceRaw.map((e) => ({
+//         userId: e._id,
+//         username: userMap.get(String(e._id))?.username || "(deleted user)",
+//         role: userMap.get(String(e._id))?.role || null,
+//         orderCount: e.orderCount,
+//         revenue: e.revenue,
+//         photoCount: e.photoCount,
+//       }));
+
+//       const serviceBreakdownRaw = await AddCustomer.aggregate([
+//         { $match: match },
+//         { $group: { _id: "$PhotoType", count: { $sum: 1 } } },
+//         { $sort: { count: -1 } },
+//       ]);
+
+//       const serviceBreakdown = serviceBreakdownRaw.map((s) => ({
+//         photoType: s._id,
+//         count: s.count,
+//       }));
+
+//       const paymentBreakdownRaw = await AddCustomer.aggregate([
+//         { $match: match },
+//         {
+//           $group: {
+//             _id: { $ifNull: ["$paymentMethod", "Not Recorded"] },
+//             count: { $sum: 1 },
+//             totalPaid: { $sum: "$amountPaid" },
+//           },
+//         },
+//         { $sort: { totalPaid: -1 } },
+//       ]);
+
+//       const paymentBreakdown = paymentBreakdownRaw.map((p) => ({
+//         paymentMethod: p._id,
+//         count: p.count,
+//         cashAmount:p.cashAmount,
+//         edahabAmount:p.edahabAmount,
+//         zaadAmount:p.zaadAmount,
+//         totalPaid: p.totalPaid,
+//       }));
+
+//       // 🌟 PHASE 5 (financial tracking): expenses + net profit ee isla muddadan
+//       const expenseMatch = {
+//         studioId: req.studioId,
+//         date: { $gte: fromDate, $lte: toDate },
+//       };
+
+//       const [expenseSummary] = await Expense.aggregate([
+//         { $match: expenseMatch },
+//         { $group: { _id: null, total: { $sum: "$amount" } } },
+//       ]);
+
+//       const expensesByCategoryRaw = await Expense.aggregate([
+//         { $match: expenseMatch },
+//         { $group: { _id: "$category", total: { $sum: "$amount" } } },
+//         { $sort: { total: -1 } },
+//       ]);
+
+//       const totalPaid = summary?.totalPaid || 0;
+//       const totalExpenses = expenseSummary?.total || 0;
+
+//       res.status(200).json({
+//         range: { from: fromDate, to: toDate },
+//         revenue: {
+//           totalPaid,
+//           totalOutstanding: summary?.totalOutstanding || 0,
+//           orderCount: summary?.orderCount || 0,
+//         },
+//         photoCount: summary?.totalPhotos || 0,
+//         employeePerformance,
+//         serviceBreakdown,
+//         paymentBreakdown,
+//         expenses: {
+//           total: totalExpenses,
+//           byCategory: expensesByCategoryRaw.map((e) => ({
+//             category: e._id,
+//             total: e.total,
+//           })),
+//         },
+//         netProfit: totalPaid - totalExpenses,
+//       });
+//     } catch (error) {
+//       res.status(500).json({ error: error.message });
+//     }
+//   },
+// );
 app.get(
   "/api/Studio/Reports",
   protect,
@@ -1033,6 +1178,7 @@ app.get(
         createdAt: { $gte: fromDate, $lte: toDate },
       };
 
+      // 🌟 Summary guud oo ay ku jiraan wadarta Cash, Zaad, iyo eDahab
       const [summary] = await AddCustomer.aggregate([
         { $match: match },
         {
@@ -1042,6 +1188,9 @@ app.get(
             totalOutstanding: { $sum: "$remainingAmount" },
             totalPhotos: { $sum: "$numberOfPhotos" },
             orderCount: { $sum: 1 },
+            totalCash: { $sum: { $ifNull: ["$cashAmount", 0] } },
+            totalZaad: { $sum: { $ifNull: ["$zaadAmount", 0] } },
+            totaleDahab: { $sum: { $ifNull: ["$edahabAmount", 0] } },
           },
         },
       ]);
@@ -1085,12 +1234,16 @@ app.get(
         count: s.count,
       }));
 
+      // 🌟 Payment Breakdown ee backend-ka oo leh $sum-ka hababka lacagaha
       const paymentBreakdownRaw = await AddCustomer.aggregate([
         { $match: match },
         {
           $group: {
             _id: { $ifNull: ["$paymentMethod", "Not Recorded"] },
             count: { $sum: 1 },
+            cashAmount: { $sum: { $ifNull: ["$cashAmount", 0] } },
+            zaadAmount: { $sum: { $ifNull: ["$zaadAmount", 0] } },
+            edahabAmount: { $sum: { $ifNull: ["$edahabAmount", 0] } },
             totalPaid: { $sum: "$amountPaid" },
           },
         },
@@ -1100,10 +1253,12 @@ app.get(
       const paymentBreakdown = paymentBreakdownRaw.map((p) => ({
         paymentMethod: p._id,
         count: p.count,
+        cashAmount: p.cashAmount,
+        zaadAmount: p.zaadAmount,
+        edahabAmount: p.edahabAmount,
         totalPaid: p.totalPaid,
       }));
 
-      // 🌟 PHASE 5 (financial tracking): expenses + net profit ee isla muddadan
       const expenseMatch = {
         studioId: req.studioId,
         date: { $gte: fromDate, $lte: toDate },
@@ -1129,6 +1284,9 @@ app.get(
           totalPaid,
           totalOutstanding: summary?.totalOutstanding || 0,
           orderCount: summary?.orderCount || 0,
+          totalCash: summary?.totalCash || 0,
+          totalZaad: summary?.totalZaad || 0,
+          totaleDahab: summary?.totaleDahab || 0,
         },
         photoCount: summary?.totalPhotos || 0,
         employeePerformance,
@@ -1148,6 +1306,7 @@ app.get(
     }
   },
 );
+
 
 // 🌟 PHASE 5: REVENUE TRENDS — monthly time series (revenue/expenses/netProfit)
 app.get(
