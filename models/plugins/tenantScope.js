@@ -14,23 +14,25 @@
 // This makes any cross-tenant read a deliberate, greppable decision instead
 // of an accident.
 export function tenantScopePlugin(schema) {
-  schema.pre(["find", "findOne", "countDocuments"], function (next) {
+  // 🌟 Mongoose 9 query middleware no longer takes a `next` callback — the
+  // hook function must return (to proceed) or throw (to reject the query).
+  // The old next()/next(error) callback style silently produced
+  // "TypeError: next is not a function" on EVERY query against a guarded
+  // model, since `next` was simply undefined here — this took down
+  // GET /api/Customer/List and every other route on these four models.
+  schema.pre(["find", "findOne", "countDocuments"], function () {
     const options = this.getOptions();
     if (options && options.skipTenantGuard) {
-      return next();
+      return;
     }
 
     const filter = this.getQuery();
     if (!filter || !Object.prototype.hasOwnProperty.call(filter, "studioId")) {
-      return next(
-        new Error(
-          `Tenant guard: a "${this.model.modelName}" query is missing studioId in its filter. ` +
-            `Add studioId to the query, or if this is a verified superadmin cross-studio read, ` +
-            `opt out explicitly with .setOptions({ skipTenantGuard: true }).`,
-        ),
+      throw new Error(
+        `Tenant guard: a "${this.model.modelName}" query is missing studioId in its filter. ` +
+          `Add studioId to the query, or if this is a verified superadmin cross-studio read, ` +
+          `opt out explicitly with .setOptions({ skipTenantGuard: true }).`,
       );
     }
-
-    next();
   });
 }
