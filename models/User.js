@@ -35,6 +35,16 @@ const userSchema = new mongoose.Schema(
       ref: "Studio",
       default: null,
       index: true,
+      // 🌟 PHASE 1 (multi-tenant foundation): every employee must belong to
+      // exactly one studio. studio_manager/studio_admin are exempt here only
+      // because legacy accounts created before the Studio model existed may
+      // still be mid-migration (see tenantMiddleware.js lazy backfill) —
+      // enforcing this for them at the schema level would break their login
+      // before that backfill runs. No code path creates an employee without
+      // studioId, so this is safe to require unconditionally for that role.
+      required: function () {
+        return this.role === "employee";
+      },
     },
     lastLogin: {
       type: Date,

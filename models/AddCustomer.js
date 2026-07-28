@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { tenantScopePlugin } from "./plugins/tenantScope.js";
 
 const AddCustomerSchem = new mongoose.Schema(
   {
@@ -104,5 +105,7 @@ const AddCustomerSchem = new mongoose.Schema(
 );
 
 AddCustomerSchem.index({ studioId: 1, createdAt: -1 });
+
+AddCustomerSchem.plugin(tenantScopePlugin);
 
 export default mongoose.model("AddCustomer", AddCustomerSchem);

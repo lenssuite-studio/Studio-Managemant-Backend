@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { tenantScopePlugin } from "./plugins/tenantScope.js";
 
 // 🌟 PHASE 3 (fraud-prevention): APPEND-ONLY audit trail. No route or
 // controller in this app may ever update or delete an AuditLog document —
@@ -46,5 +47,7 @@ const auditLogSchema = new mongoose.Schema(
 
 auditLogSchema.index({ studioId: 1, createdAt: -1 });
 auditLogSchema.index({ customerId: 1, createdAt: -1 });
+
+auditLogSchema.plugin(tenantScopePlugin);
 
 export default mongoose.model("AuditLog", auditLogSchema);

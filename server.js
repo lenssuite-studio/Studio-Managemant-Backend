@@ -162,6 +162,7 @@ app.get("/api/Admin/Customers", protect, async (req, res) => {
     }
 
     const customers = await AddCustomer.find()
+      .setOptions({ skipTenantGuard: true }) // 🌟 superadmin cross-studio read — deliberate opt-out
       .populate("userId", "username email")
       .sort({ createdAt: -1 });
 
@@ -182,7 +183,9 @@ app.get("/api/Admin/Stats", protect, async (req, res) => {
     const totalStudio = await User.countDocuments({
       role: { $in: studioRoles },
     });
-    const totalCustomers = await AddCustomer.countDocuments({});
+    const totalCustomers = await AddCustomer.countDocuments({}).setOptions({
+      skipTenantGuard: true, // 🌟 superadmin cross-studio count — deliberate opt-out
+    });
 
     const activeStudios = await User.countDocuments({
       role: { $in: studioRoles },

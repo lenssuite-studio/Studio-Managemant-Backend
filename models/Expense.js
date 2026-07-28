@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { tenantScopePlugin } from "./plugins/tenantScope.js";
 
 const expenseSchema = new mongoose.Schema(
   {
@@ -36,5 +37,7 @@ const expenseSchema = new mongoose.Schema(
 );
 
 expenseSchema.index({ studioId: 1, date: -1 });
+
+expenseSchema.plugin(tenantScopePlugin);
 
 export default mongoose.model("Expense", expenseSchema);

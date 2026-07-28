@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { tenantScopePlugin } from "./plugins/tenantScope.js";
 
 // 🌟 PHASE 3 (fraud-prevention): an Employee's proposed edit/delete/archive
 // on a non-completed order, sitting here until a Studio Manager approves or
@@ -63,5 +64,7 @@ const pendingChangeSchema = new mongoose.Schema(
 
 pendingChangeSchema.index({ studioId: 1, status: 1, createdAt: -1 });
 pendingChangeSchema.index({ customerId: 1, status: 1 });
+
+pendingChangeSchema.plugin(tenantScopePlugin);
 
 export default mongoose.model("PendingChange", pendingChangeSchema);
