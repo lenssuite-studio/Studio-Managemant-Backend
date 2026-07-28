@@ -57,7 +57,13 @@ const AddCustomerSchem = new mongoose.Schema(
 
     paymentMethod: {
       type: String,
-      enum: ["Cash", "Edahab", "SAAD"],
+      // 🌟 PHASE 2 (cleanup/sync): server-derived from cashAmount/zaadAmount/
+      // edahabAmount at create/edit time (see derivePaymentMethod in
+      // server.js) — never trusted from client input. "Mixed" covers split
+      // payments. "SAAD" is a legacy enum value kept only for backward
+      // compatibility with any pre-existing record; new records use "Zaad"
+      // (the name used everywhere else in the app: zaadAmount, UI labels).
+      enum: ["Cash", "Zaad", "Edahab", "Mixed", "SAAD"],
       required: true,
       default: "Cash",
     },

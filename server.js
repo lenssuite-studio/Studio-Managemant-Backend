@@ -285,6 +285,25 @@ function isStudioManagerRole(role) {
   return role === "studio_manager" || role === "studio_admin";
 }
 
+// 🌟 PHASE 2 (cleanup/sync): paymentMethod must always reflect the actual
+// cash/zaad/edahab breakdown. The old flow trusted a client-supplied
+// paymentMethod value that the UI never actually sends, so every customer
+// silently defaulted to "Cash" regardless of how they really paid — which
+// then fed wrong numbers into the Reports payment-method breakdown. This is
+// the single source of truth for paymentMethod going forward; it is never
+// read from req.body directly.
+function derivePaymentMethod({ cashAmount, zaadAmount, edahabAmount }) {
+  const methodsUsed = [
+    (Number(cashAmount) || 0) > 0 && "Cash",
+    (Number(zaadAmount) || 0) > 0 && "Zaad",
+    (Number(edahabAmount) || 0) > 0 && "Edahab",
+  ].filter(Boolean);
+
+  if (methodsUsed.length === 0) return "Cash";
+  if (methodsUsed.length === 1) return methodsUsed[0];
+  return "Mixed";
+}
+
 // Hubi in order-ku uusan horey isbeddel u sugayn — haddii uu leeyahay, ha la
 // oggolaanin wax isbeddel cusub oo toos ah (Manager) ama codsi cusub (Employee)
 // intii aan la ansixin/diidin kii hore. Tan waxay ka hortagaysaa in la ansixiyo
@@ -364,7 +383,6 @@ app.post(
         status,
         PhotoType,
         vipTierLevel, // 👈 Cusub
-        paymentMethod,
         amountPaid,
         remainingAmount,
         numberOfPhotos,
@@ -386,7 +404,7 @@ app.post(
         status,
         PhotoType,
         vipTierLevel: vipTierLevel || "VIP_1",
-        paymentMethod,
+        paymentMethod: derivePaymentMethod({ cashAmount, zaadAmount, edahabAmount }),
         amountPaid: Number(amountPaid) || 0,
         remainingAmount: Number(remainingAmount) || 0,
         numberOfPhotos: Number(numberOfPhotos) || 0,
@@ -541,6 +559,21 @@ app.put("/api/Customer/Edit/:id", protect, attachTenant, async (req, res) => {
       if (Object.prototype.hasOwnProperty.call(req.body, field)) {
         safeUpdates[field] = req.body[field];
       }
+    }
+
+    // 🌟 PHASE 2 (cleanup/sync): if the payment breakdown is part of this
+    // edit, recompute paymentMethod from the resulting merged values so it
+    // never drifts out of sync with cashAmount/zaadAmount/edahabAmount.
+    // Never trust a client-supplied paymentMethod on its own.
+    const paymentFieldsTouched = ["cashAmount", "zaadAmount", "edahabAmount"].some(
+      (field) => Object.prototype.hasOwnProperty.call(safeUpdates, field),
+    );
+    if (paymentFieldsTouched) {
+      safeUpdates.paymentMethod = derivePaymentMethod({
+        cashAmount: safeUpdates.cashAmount ?? customer.cashAmount,
+        zaadAmount: safeUpdates.zaadAmount ?? customer.zaadAmount,
+        edahabAmount: safeUpdates.edahabAmount ?? customer.edahabAmount,
+      });
     }
 
     if (!isStudioManagerRole(req.role)) {
