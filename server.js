@@ -311,6 +311,7 @@ function derivePaymentMethod({ cashAmount, zaadAmount, edahabAmount }) {
 // Manager-ka ahi si toos ah wax uga beddelo diiwaanka intii codsigu sugayay.
 async function hasPendingChange(customer) {
   const existingPending = await PendingChange.findOne({
+    studioId: customer.studioId,
     customerId: customer._id,
     status: "pending",
   });

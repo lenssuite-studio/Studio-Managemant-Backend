@@ -45,17 +45,37 @@ export const attachTenant = async (req, res, next) => {
         ownerId: user._id,
       });
 
-      user.studioId = studio._id;
-      needsSave = true;
+      // 🌟 Atomic claim: this update only succeeds if studioId is STILL null
+      // at write time. Without this, two concurrent first-requests for the
+      // same brand-new user (e.g. two tabs, or two requests firing back to
+      // back right after signup) would each read studioId as null, each
+      // create their OWN Studio above, and the slower of the two plain
+      // user.save() calls would silently overwrite the faster one's
+      // assignment — permanently detaching anything already created under
+      // the first studioId, since every future request resolves to the
+      // second one instead.
+      const claimedUser = await User.findOneAndUpdate(
+        { _id: user._id, studioId: null },
+        { $set: { studioId: studio._id, role: user.role } },
+        { new: true },
+      );
+
+      if (claimedUser) {
+        user = claimedUser;
+      } else {
+        // Another concurrent request already won the race and claimed a
+        // studioId first — discard the Studio we just created and adopt
+        // whichever one actually won, instead of silently overwriting it.
+        await Studio.deleteOne({ _id: studio._id });
+        user = await User.findById(user._id);
+      }
 
       // Dib u xir xogtii hore ee AddCustomer ee uu lahaa user-kan, kuwa maqan studioId oo kaliya
       await AddCustomer.updateMany(
         { userId: user._id, studioId: { $exists: false } },
-        { $set: { studioId: studio._id } },
+        { $set: { studioId: user.studioId } },
       );
-    }
-
-    if (needsSave) {
+    } else if (needsSave) {
       await user.save();
     }
 
