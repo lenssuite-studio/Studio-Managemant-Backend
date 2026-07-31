@@ -258,6 +258,9 @@ const AUDIT_FIELDS = [
   "vipTierLevel",
   "normalPhotosCount",
   "vipPhotosCount",
+  "vip1PhotosCount",
+  "vip2PhotosCount",
+  "vip3PhotosCount",
   "expPhotosCount",
   "expExtraCharge",
   "cashAmount",
@@ -389,6 +392,9 @@ app.post(
         numberOfPhotos,
         normalPhotosCount, // 👈 Cusub
         vipPhotosCount, // 👈 Cusub
+        vip1PhotosCount,
+        vip2PhotosCount,
+        vip3PhotosCount,
         expPhotosCount, // 👈 Cusub
         expExtraCharge, // 👈 Cusub
         cashAmount, // 👈 Cusub
@@ -411,6 +417,9 @@ app.post(
         numberOfPhotos: Number(numberOfPhotos) || 0,
         normalPhotosCount: Number(normalPhotosCount) || 0,
         vipPhotosCount: Number(vipPhotosCount) || 0,
+        vip1PhotosCount: Number(vip1PhotosCount) || 0,
+        vip2PhotosCount: Number(vip2PhotosCount) || 0,
+        vip3PhotosCount: Number(vip3PhotosCount) || 0,
         expPhotosCount: Number(expPhotosCount) || 0,
         expExtraCharge: Number(expExtraCharge) || 0,
         cashAmount: Number(cashAmount) || 0,

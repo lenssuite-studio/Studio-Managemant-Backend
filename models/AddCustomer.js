@@ -100,6 +100,10 @@ const AddCustomerSchem = new mongoose.Schema(
       default: 0,
     },
 
+    vip1PhotosCount: { type: Number, default: 0 },
+    vip2PhotosCount: { type: Number, default: 0 },
+    vip3PhotosCount: { type: Number, default: 0 },
+
     expPhotosCount: { type: Number, default: 0 },
     expExtraCharge: { type: Number, default: 0 },
 
