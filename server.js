@@ -880,7 +880,16 @@ app.get(
         status: "pending",
       })
         .populate("requestedBy", "username email")
-        .populate("customerId", "fullName folderName status")
+        // 🌟 customerId refs the guarded AddCustomer model — populate runs its
+        // own internal find() by _id with no studioId filter. Safe to skip
+        // the guard here: the parent query already scoped candidate docs to
+        // req.studioId, so populate can only ever resolve customers within
+        // this tenant.
+        .populate({
+          path: "customerId",
+          select: "fullName folderName status",
+          options: { skipTenantGuard: true },
+        })
         .sort({ createdAt: -1 });
 
       res.status(200).json(pendingChanges);
@@ -1028,7 +1037,13 @@ app.get(
 
       const history = await AuditLog.find(filter)
         .populate("userId", "username email role")
-        .populate("customerId", "fullName folderName")
+        // 🌟 customerId refs the guarded AddCustomer model — see identical
+        // note in GET /api/Studio/PendingChanges above.
+        .populate({
+          path: "customerId",
+          select: "fullName folderName",
+          options: { skipTenantGuard: true },
+        })
         .sort({ createdAt: -1 })
         .limit(200);
 
